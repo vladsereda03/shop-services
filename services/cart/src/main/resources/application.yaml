@@ -1,0 +1,40 @@
+server:
+  port: 8083
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/carts
+    username: postgres
+    password: postgres
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  kafka:
+    bootstrap-servers: localhost:29092, localhost:39092, localhost:49092
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      group-id: cart-service
+      properties:
+        spring.json.trusted.packages: shop.event
+      auto-offset-reset: earliest
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://auth.local:9000
+          jwk-set-uri: http://auth.local:9000/oauth2/jwks
+      client:
+        registration:
+          products-read:
+            provider: auth-server
+            client-id: cart-service
+            client-secret: cart-service-secret
+            authorization-grant-type: client_credentials
+            scope: products.read
+        provider:
+          auth-server:
+            token-uri: http://auth-service:9000/oauth2/token

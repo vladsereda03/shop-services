@@ -1,0 +1,42 @@
+server:
+  servlet:
+    session:
+      persistent: false
+  port: 8080
+
+liqpay:
+  key:
+    public: ${LIQPAY_PUBLIC_KEY}
+    private: ${LIQPAY_PRIVATE_KEY}
+
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          client:
+            client-id: client
+            client-name: client
+            client-secret: secret
+            client-authentication-method: client_secret_basic
+            provider: auth-service
+            authorization-grant-type: authorization_code
+            redirect-uri: "http://localhost:8080/login/oauth2/code/client"
+            scope: openid,profile
+        provider:
+          auth-service:
+            issuer-uri: http://auth.local:9000
+            authorization-uri: http://auth.local:9000/oauth2/authorize
+            token-uri: http://auth.local:9000/oauth2/token
+            user-info-uri: http://auth.local:9000/userinfo
+            user-name-attribute: sub
+  devtools:
+    restart:
+      enabled: false
+
+
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.web.reactive.function.client: TRACE

@@ -1,0 +1,53 @@
+server:
+  servlet:
+    session:
+      persistent: false
+  port: 9000
+
+jwk:
+  key-id: ${JWK_KEY_ID}
+
+jwt:
+  public-key: ${JWT_PUBLIC_KEY}
+  private-key: ${JWT_PRIVATE_KEY}
+
+spring:
+
+  application:
+    name: Auth service
+
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/authDB
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  devtools:
+    restart:
+      enabled: false
+
+  kafka:
+    bootstrap-servers: localhost:29092, localhost:39092, localhost:49092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        linger.ms: 5
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+      acks: all
+
+
+
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.security.oauth2: DEBUG

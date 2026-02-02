@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>Товар</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #222;
+      color: #fff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .container {
+      width: 100%;
+      max-width: 600px;
+    }
+    .item {
+      background-color: #333;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      transition: background-color 0.3s ease;
+    }
+    .item img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin-bottom: 10px;
+      border-radius: 8px;
+    }
+    .item-title {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .item-price {
+      font-size: 14px;
+    }
+    .item-category,
+    .item-availability,
+    .item-manufacturer,
+    .item-description {
+      margin-top: 10px;
+      font-size: 14px;
+    }
+
+    .item-description {
+      font-style: italic;
+    }
+
+    .manufacturers {
+      margin-top: 10px;
+    }
+
+    .manufacturer {
+      margin-right: 10px;
+      display: inline-block;
+      background-color: #555;
+      padding: 5px 10px;
+      border-radius: 5px;
+    }
+    .quantity-controls {
+      display: flex;
+      align-items: center;
+      margin-top: 10px;
+    }
+    .quantity-controls button {
+      background-color: transparent;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      font-size: 18px;
+    }
+    .quantity-display {
+      margin: 0 10px;
+      font-size: 16px;
+      color: #7FFF00;
+    }
+    .btn-submit {
+      background-color: #4CAF50;
+      border: none;
+      color: white;
+      padding: 10px 20px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 16px;
+      margin-top: 10px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      border-radius: 5px;
+    }
+    .btn-submit:hover {
+      background-color: #45a049;
+    }
+
+    .profile-tab {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background-color: #4CAF50;
+      padding: 10px 20px;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+      cursor: pointer;
+    }
+
+    .profile-content {
+      display: none;
+      position: fixed;
+      top: 60px;
+      right: 20px;
+      background-color: #444;
+      border: 1px solid #888;
+      border-radius: 5px;
+      padding: 20px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+    }
+
+    .profile-content.show {
+      display: block;
+    }
+
+    .profile-info p {
+      margin: 5px 0;
+    }
+
+    .profile-actions button {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 8px 15px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-top: 10px;
+      border-radius: 5px;
+    }
+
+    .profile-actions button + button {
+      margin-left: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="profile-tab" id="profile-btn">Профіль</div>
+
+<div class="profile-content" id="profile-content">
+  <div class="profile-info">
+    <p><strong>Username:</strong> <span th:text="${user.getUsername()}">username</span></p>
+    <p><strong>ПІБ:</strong> <span th:text="${user.getFullName()}">fullName</span></p>
+    <p><strong>Email:</strong> <span th:text="${user.getEmail()}">email</span></p>
+  </div>
+  <div class="profile-actions">
+    <button onclick="goToCart()">Кошик</button>
+    <button onclick="goToOrders()">Замовлення</button>
+    <button onclick="logout()">Вихід</button>
+  </div>
+</div>
+
+<script>
+  function goToCart() {
+    window.location.href = "http://localhost:8080/cart";
+  }
+
+  function goToOrders() {
+    window.location.href = "http://electropoint.hopto.org/orders";
+  }
+
+  function logout() {
+    if (window.confirm('Ви впевнені, що бажаєте вийти?')) {
+      window.location.href = "http://electropoint.hopto.org/account/logout";
+    }
+  }
+
+  var profileBtn = document.getElementById("profile-btn");
+  var profileContent = document.getElementById("profile-content");
+
+  profileBtn.addEventListener("click", function() {
+    profileContent.classList.toggle("show");
+  });
+
+  document.addEventListener("click", function(event) {
+    var isClickInsideProfile = profileBtn.contains(event.target) || profileContent.contains(event.target);
+
+    if (!isClickInsideProfile) {
+      profileContent.classList.remove("show");
+    }
+  });
+</script>
+
+<!-- ///////////////////////////////////////////////////////////////////////////////////////////////////////////// -->
+
+
+<div class="container">
+  <div class="item">
+    <img th:src= "*{'data:image/jpg;base64,' + good.getImageBase64()}" height="350px" width="350px" alt="Product Image">
+    <div class="item-title" th:text="${good.getName()}"></div>
+    <div class="item-price" th:text="'Ціна, грн.: ' + ${good.getPriceGrn()}"></div>
+    <div class="item-category" th:text="'Категорія: ' + ${category}"></div>
+    <div class="item-availability" th:text="'Доступність: ' + ${isAvailable}"></div>
+    <div class="manufacturers">
+      <span>Виробники:</span>
+      <span th:each="manufacturer : ${good.getManufacturers()}" class="manufacturer" th:text="${manufacturer.getName()}"></span>
+    </div>
+    <div class="item-description" th:text="'Опис: ' + ${good.getDescription()}"></div>
+    <div class="quantity-controls">
+      <button onclick="decrementQuantity()">-</button>
+      <div class="quantity-display">1</div>
+      <button onclick="incrementQuantity()">+</button>
+    </div>
+    <button class="btn-submit" onclick="submitQuantity()">В кошик</button>
+  </div>
+</div>
+
+<script>
+  let quantityDisplay = document.querySelector('.quantity-display');
+  let quantity = 1;
+
+  function incrementQuantity() {
+    quantity++;
+    quantityDisplay.textContent = quantity;
+  }
+
+  function decrementQuantity() {
+    if (quantity > 1) {
+      quantity--;
+      quantityDisplay.textContent = quantity;
+    }
+  }
+
+  function submitQuantity() {
+    // Отримуємо поточну URL-адресу сторінки
+    let currentUrl = window.location.href;
+    // Створюємо нову URL-адресу з параметром quantity
+    let urlWithQuantity = currentUrl + '?quantity=' + quantity;
+    // Перенаправляємо користувача на нову сторінку
+    window.location.href = 'http://localhost:8080/cart/add?quantity=' + quantity;
+  }
+
+</script>
+
+</body>
+</html>

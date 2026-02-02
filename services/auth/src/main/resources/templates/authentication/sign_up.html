@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Реєстрація</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #222;
+            color: #ddd;
+        }
+        .container {
+            width: 320px;
+            margin: 20px auto;
+            padding: 18px;
+            background: #333;
+            border: 1px solid #444;
+            border-radius: 6px;
+        }
+        .container h2 {
+            text-align: center;
+        }
+        .container input[type="text"],
+        .container input[type="password"],
+        .container input[type="email"] {
+            width: 100%;
+            padding: 8px;
+            margin: 6px 0;
+            box-sizing: border-box;
+            background: #444;
+            color: #ddd;
+            border: 1px solid #555;
+            border-radius: 4px;
+        }
+        .container input[type="submit"] {
+            width: 100%;
+            padding: 10px;
+            margin-top: 8px;
+            background: #00aaff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .container input[type="submit"]:hover {
+            background: #0088cc;
+        }
+        a {
+            color: #00aaff;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .note {
+            color: #f66;
+            margin-top: 8px;
+            text-align: center;
+        }
+        label {
+            display: block;
+            margin-top: 12px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>New account</h2>
+
+    <div th:if="${registrationError}" class="note" th:text="${registrationError}"></div>
+
+    <form th:method="post" th:action="@{/account/signup}" th:object="${userDTO}" id="signupForm">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}" />
+
+        <label for="username">Username:</label>
+        <input type="text" id="username" th:field="*{username}" name="username" required />
+
+        <label for="password">Password:</label>
+        <input type="password" id="password" th:field="*{password}" name="password" required />
+
+        <label for="email">Email:</label>
+        <input type="email" id="email" th:field="*{email}" name="email" required />
+
+        <label for="fullName">Full name:</label>
+        <input type="text" id="fullName" th:field="*{fullName}" name="fullName" required />
+
+        <label for="phone">Phone (+380...):</label>
+        <input type="text" id="phone" th:field="*{phone}" name="phone" required />
+
+        <input type="submit" value="Sign up" />
+    </form>
+
+    <p style="margin-top: 10px; text-align: center;">
+        Profile already exists? <a href="/account/login/form">Login</a>
+    </p>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const form = document.getElementById("signupForm");
+        form.addEventListener("submit", function(event) {
+            const username = form.querySelector("input[name='username']").value.trim();
+            const password = form.querySelector("input[name='password']").value;
+            const email = form.querySelector("input[name='email']").value.trim();
+            const fullName = form.querySelector("input[name='fullName']").value.trim();
+            const phone = form.querySelector("input[name='phone']").value.trim();
+
+            let errors = [];
+
+            // Username: минимум 8 символов, начинается с буквы, буквы/цифры/_
+            if (!/^[a-zA-Z][a-zA-Z0-9_]{7,}$/.test(username)) {
+                errors.push("Username має починатися з літери, містити лише букви, цифри або підкреслення, мінімум 8 символів.");
+            }
+
+            // Password минимум 8 символов
+            if (password.length < 8) {
+                errors.push("Пароль має містити мінімум 8 символів.");
+            }
+
+            // Email валидный
+
+            if (!/^[\w.-]+@([\w-]+\.)+[a-z]{2,}$/.test(email)) {
+                errors.push("Невірний формат email.");
+            }
+
+            // Full name не пустое (для простоты)
+            if (fullName.length === 0) {
+                errors.push("Повне ім'я не може бути порожнім.");
+            }
+
+            // Phone +380 и 9 цифр
+            if (!/^\+380\d{9}$/.test(phone)) {
+                errors.push("Телефон має починатися з +380 і містити 9 цифр.");
+            }
+
+            if (errors.length > 0) {
+                event.preventDefault();
+                alert(errors.join("\\n"));
+            }
+        });
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Кошик</title>
+    <style>
+        body {
+            background-color: #121212;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            border: 2px solid #fff;
+            border-radius: 10px;
+            background-color: #1f1f1f;
+        }
+        h1 {
+            text-align: center;
+        }
+        .cart-item {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-bottom: 1px solid #fff;
+        }
+        .cart-item:last-child {
+            border-bottom: none;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            margin-right: 10px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: #fff;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        .actions > * {
+            display: inline-block;
+        }
+        .price {
+            color: #00FF7F;
+            font-size: 20px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Кошик</h1>
+
+    <div class="cart-item" th:each="entry : ${cart.getItems().entrySet()}">
+        <span>
+            <span th:text="${entry.getKey().getName()} + ': '"></span><span th:text="${entry.getValue()} + ' од.'"></span>
+        </span>
+    </div>
+
+    <div class="price" th:text="'Ціна: ' + ${price} + ' UAH'"></div>
+
+    <div class="actions">
+        <button class="btn" id="clear-cart" onclick="clearCart()">Очистити кошик</button>
+        <!--<button class="btn" id="checkout">Оформити замовлення</button>-->
+        <div th:utext="${liqpayForm}"></div>
+    </div>
+
+</div>
+
+<script>
+    function clearCart() {
+        window.location.href = "http://localhost:8080/cart/clear";
+    }
+</script>
+
+</body>
+</html>
