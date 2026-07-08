@@ -1,0 +1,34 @@
+server:
+  port: 8085
+
+liqpay:
+  public-key: ${LIQPAY_PUBLIC_KEY:sandbox_public_key}
+  private-key: ${LIQPAY_PRIVATE_KEY:sandbox_private_key}
+
+payment:
+  # in a real deployment LiqPay must be able to reach these URLs from the internet
+  result-url: http://localhost:8080/orders
+  server-url: http://localhost:8085/payment/new
+
+services:
+  order:
+    base-url: http://localhost:8084
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://auth.local:9000
+          jwk-set-uri: http://auth.local:9000/oauth2/jwks
+      client:
+        registration:
+          order-api:
+            provider: auth-server
+            client-id: payment-service
+            client-secret: payment-service-secret
+            authorization-grant-type: client_credentials
+            scope: orders.write
+        provider:
+          auth-server:
+            token-uri: http://auth.local:9000/oauth2/token

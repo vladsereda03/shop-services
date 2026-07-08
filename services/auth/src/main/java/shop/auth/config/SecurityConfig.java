@@ -17,7 +17,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.security.crypto.password.NoOpPasswordEncoder;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
@@ -158,7 +158,9 @@ public class SecurityConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return NoOpPasswordEncoder.getInstance();
+        // delegating encoder: new passwords are stored as {bcrypt}...,
+        // client secrets below keep the {noop} prefix
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
     }
 
     @Bean
@@ -166,7 +168,7 @@ public class SecurityConfig {
         RegisteredClient client = RegisteredClient.withId("client")
                 .clientId("client")
                 .clientName("client")
-                .clientSecret("secret")
+                .clientSecret("{noop}secret")
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
@@ -175,6 +177,7 @@ public class SecurityConfig {
                 .scope(OidcScopes.PROFILE)
                 .scope(OidcScopes.EMAIL)
                 .scope(OidcScopes.PHONE)
+                .scope("products.read")
                 .clientSettings(ClientSettings.builder().requireAuthorizationConsent(false)
                         .requireProofKey(false).build())
                 .tokenSettings(TokenSettings.builder()
@@ -186,13 +189,32 @@ public class SecurityConfig {
 
         RegisteredClient cartServiceClient = RegisteredClient.withId("cart-service")
                 .clientId("cart-service")
-                .clientSecret("cart-service-secret")
+                .clientSecret("{noop}cart-service-secret")
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
                 .scope("products.read")
+                .scope("products.write")
                 .build();
 
-        return new InMemoryRegisteredClientRepository(List.of(client, cartServiceClient));
+        RegisteredClient orderServiceClient = RegisteredClient.withId("order-service")
+                .clientId("order-service")
+                .clientSecret("{noop}order-service-secret")
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .scope("carts.read")
+                .scope("carts.write")
+                .build();
+
+        RegisteredClient paymentServiceClient = RegisteredClient.withId("payment-service")
+                .clientId("payment-service")
+                .clientSecret("{noop}payment-service-secret")
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .scope("orders.write")
+                .build();
+
+        return new InMemoryRegisteredClientRepository(
+                List.of(client, cartServiceClient, orderServiceClient, paymentServiceClient));
     }
 
 
@@ -204,7 +226,9 @@ public class SecurityConfig {
             if (context.getPrincipal() == null) return;
 
             String username = context.getPrincipal().getName();
-            User user = userRepository.findByUsername(username).orElseThrow();
+            // client_credentials: principal is a service client, not a user — no user claims to add
+            User user = userRepository.findByUsername(username).orElse(null);
+            if (user == null) return;
 
             Set<String> scopes = context.getAuthorizedScopes();
 
@@ -230,6 +254,8 @@ public class SecurityConfig {
                                 .map(role -> "ROLE_" + role.name())
                                 .toList()
                 );
+                // resource services (cart, order, ...) identify the user by this claim
+                context.getClaims().claim("uid", user.getId());
             }
         };
     }

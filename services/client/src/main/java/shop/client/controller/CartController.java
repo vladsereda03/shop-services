@@ -1,105 +1,118 @@
 package shop.client.controller;
 
-import jakarta.servlet.http.HttpSession;
-import lombok.AllArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import shop.client.dto.CartDTO;
+import shop.client.dto.GoodDTO;
 
-import java.security.Principal;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Controller
-@AllArgsConstructor
 @RequestMapping("/cart")
 public class CartController {
+
+    private static final Logger logger = LoggerFactory.getLogger(CartController.class);
+
+    // row shown on the cart page: cart item enriched with the product name
+    public record CartItemView(Long goodId, String name, Integer quantity, double totalGrn) {}
+
     private final RestClient restClient;
+    private final String cartBaseUrl;
+    private final String productBaseUrl;
+    private final String paymentBaseUrl;
 
-    /*@Autowired
-    public CartController(GoodRepository goodRepository, UserRepository userRepository, OrderGenerator orderGenerator, CartService cartService) {
-        this.goodRepository = goodRepository;
-        this.userRepository = userRepository;
-        this.orderGenerator = orderGenerator;
-        this.cartService = cartService;
-    }*/
-
-    @GetMapping("/add")
-    public String addToCart(Principal principal, @RequestParam("quantity") int wishedQuantity) {
-        /*String username = principal.getName();
-
-        UserDTO userDto = restClient.get()
-                .uri("http://auth.local:9000/connect/userinfo", username)
-                .retrieve()
-                .body(UserDTO.class);
-
-
-
-        User currentUser = userRepository.findUserById(userSession.getId());
-        Long itemId = (Long) httpSession.getAttribute("openedItemId");
-        Cart cart = currentUser.getCart();
-        Good wishedGood = goodRepository.getReferenceById(itemId);
-        wishedGood.setQuantity(wishedGood.getQuantity() - wishedQuantity);
-        goodRepository.saveAndFlush(wishedGood);
-        cart.getItems().merge(wishedGood, wishedQuantity, Integer::sum);
-        userRepository.saveAndFlush(currentUser);
-        return "redirect:/goods";*/
-
-        return null;
+    public CartController(RestClient restClient,
+                          @Value("${services.cart.base-url}") String cartBaseUrl,
+                          @Value("${services.product.base-url}") String productBaseUrl,
+                          @Value("${services.payment.base-url}") String paymentBaseUrl) {
+        this.restClient = restClient;
+        this.cartBaseUrl = cartBaseUrl;
+        this.productBaseUrl = productBaseUrl;
+        this.paymentBaseUrl = paymentBaseUrl;
     }
 
     @GetMapping()
-    public String showCart(HttpSession httpSession, Model model) {
+    public String showCart(Model model) {
+        CartDTO cart = restClient.get()
+                .uri(cartBaseUrl + "/carts/my")
+                .retrieve()
+                .body(CartDTO.class);
 
+        Map<Long, GoodDTO> goodsById = restClient.get()
+                .uri(productBaseUrl + "/api/products")
+                .retrieve()
+                .body(new ParameterizedTypeReference<List<GoodDTO>>() {})
+                .stream()
+                .collect(Collectors.toMap(GoodDTO::getId, Function.identity()));
 
+        List<CartItemView> items = cart.getItems().stream()
+                .map(item -> new CartItemView(
+                        item.getGoodId(),
+                        goodsById.containsKey(item.getGoodId())
+                                ? goodsById.get(item.getGoodId()).getName()
+                                : "Товар #" + item.getGoodId(),
+                        item.getQuantity(),
+                        item.getPriceKopeck() * item.getQuantity() / 100.0))
+                .toList();
 
-        /*User userSession = (User) httpSession.getAttribute("currentUser");
-        User currentUser = userRepository.findUserById(userSession.getId());
-        Cart cart = currentUser.getCart();
-        double price = cart.calculatePrice();
+        model.addAttribute("items", items);
+        model.addAttribute("price", cart.getTotalPrice());
 
-        model.addAttribute("cart", cart);
-        model.addAttribute("price", price);
-        model.addAttribute("liqpayForm", orderGenerator.createPaymentFormHtml(httpSession, price));
+        // LiqPay form is rendered by the payment service; without it the page still works
+        if (!items.isEmpty()) {
+            try {
+                String liqpayForm = restClient.get()
+                        .uri(paymentBaseUrl + "/payments/form?amount={amount}", cart.getTotalPrice())
+                        .retrieve()
+                        .body(String.class);
+                model.addAttribute("liqpayForm", liqpayForm);
+            } catch (RestClientException e) {
+                logger.warn("Payment service is unavailable, cart page is shown without the LiqPay form", e);
+            }
+        }
 
-        return "orders/cart";*/
+        return "cart/cart";
+    }
 
-        return null;
+    @GetMapping("/add")
+    public String addToCart(@RequestParam("goodId") Long goodId,
+                            @RequestParam("quantity") int quantity,
+                            RedirectAttributes redirectAttributes) {
+        try {
+            restClient.post()
+                    .uri(cartBaseUrl + "/carts/my/items?goodId={goodId}&quantity={quantity}", goodId, quantity)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (HttpClientErrorException e) {
+            redirectAttributes.addFlashAttribute("cartError",
+                    e.getStatusCode().value() == 409
+                            ? "Недостатньо товару на складі"
+                            : "Не вдалося додати товар у кошик");
+            return "redirect:/goods/" + goodId;
+        }
+        return "redirect:/";
     }
 
     @GetMapping("/clear")
-    public String clearCart(HttpSession httpSession) {
-        /*User userSession = (User) httpSession.getAttribute("currentUser");
-        User currentUser = userRepository.findUserById(userSession.getId());
-        cartService.clearCart(currentUser.getCart());
-        userRepository.saveAndFlush(currentUser);
-        return "redirect:/goods";*/
-
-        return null;
-    }
-
-
-    //todo: shift logic to order microservice (OrderGenerator etc.)
-    public String createPaymentFormHtml(HttpSession httpSession, double uah) {
-        /*Map<String, String> params = new HashMap<>();
-        params.put("action", "pay");
-        params.put("amount", String.valueOf(uah));
-        params.put("currency", "UAH");
-        params.put("description", "Оплата обраних товарів");
-        params.put("order_id", Long.toString(cartRepository.getCurrentOrderSeq()-1));
-        params.put("version", "3");
-        params.put("sandbox", "1");
-        params.put("result_url", "http://electropoint.hopto.org/order/new");
-        params.put("server_url", "http://electropoint.hopto.org/order/payment");
-        params.put("info", "no info");
-        LiqPay liqpay = new LiqPay(PUBLIC_KEY, PRIVATE_KEY);
-        System.out.println("--------------------------");
-        System.out.println(PUBLIC_KEY);
-        System.out.println(PRIVATE_KEY);
-        System.out.println("--------------------------");
-        return liqpay.cnb_form(params);*/
-
-        return null;
+    public String clearCart() {
+        restClient.delete()
+                .uri(cartBaseUrl + "/carts/my")
+                .retrieve()
+                .toBodilessEntity();
+        return "redirect:/";
     }
 }

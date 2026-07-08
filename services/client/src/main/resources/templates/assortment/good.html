@@ -167,11 +167,11 @@
 
 <script>
   function goToCart() {
-    window.location.href = "http://localhost:8080/cart";
+    window.location.href = "/cart";
   }
 
   function goToOrders() {
-    window.location.href = "http://electropoint.hopto.org/orders";
+    window.location.href = "/orders";
   }
 
   function logout() {
@@ -200,6 +200,8 @@
 
 
 <div class="container">
+  <div th:if="${cartError}" th:text="${cartError}"
+       style="background-color: #b33; color: #fff; padding: 10px; border-radius: 5px; margin-bottom: 10px;"></div>
   <div class="item">
     <img th:src= "*{'data:image/jpg;base64,' + good.getImageBase64()}" height="350px" width="350px" alt="Product Image">
     <div class="item-title" th:text="${good.getName()}"></div>
@@ -220,7 +222,7 @@
   </div>
 </div>
 
-<script>
+<script th:inline="javascript">
   let quantityDisplay = document.querySelector('.quantity-display');
   let quantity = 1;
 
@@ -237,12 +239,8 @@
   }
 
   function submitQuantity() {
-    // Отримуємо поточну URL-адресу сторінки
-    let currentUrl = window.location.href;
-    // Створюємо нову URL-адресу з параметром quantity
-    let urlWithQuantity = currentUrl + '?quantity=' + quantity;
-    // Перенаправляємо користувача на нову сторінку
-    window.location.href = 'http://localhost:8080/cart/add?quantity=' + quantity;
+    const goodId = [[${good.id}]];
+    window.location.href = '/cart/add?goodId=' + goodId + '&quantity=' + quantity;
   }
 
 </script>

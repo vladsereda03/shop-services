@@ -58,25 +58,36 @@
 <div class="container">
     <h1>Кошик</h1>
 
-    <div class="cart-item" th:each="entry : ${cart.getItems().entrySet()}">
+    <div th:if="${orderError}" th:text="${orderError}"
+         style="background-color: #b33; color: #fff; padding: 10px; border-radius: 5px; margin-bottom: 10px;"></div>
+
+    <div class="cart-item" th:each="item : ${items}">
         <span>
-            <span th:text="${entry.getKey().getName()} + ': '"></span><span th:text="${entry.getValue()} + ' од.'"></span>
+            <span th:text="${item.name} + ': '"></span><span th:text="${item.quantity} + ' од.'"></span>
+            <span class="price" th:text="' — ' + ${item.totalGrn} + ' грн'"></span>
         </span>
     </div>
+
+    <div class="cart-item" th:if="${#lists.isEmpty(items)}">Кошик порожній</div>
 
     <div class="price" th:text="'Ціна: ' + ${price} + ' UAH'"></div>
 
     <div class="actions">
         <button class="btn" id="clear-cart" onclick="clearCart()">Очистити кошик</button>
-        <!--<button class="btn" id="checkout">Оформити замовлення</button>-->
-        <div th:utext="${liqpayForm}"></div>
+        <button class="btn" id="checkout" onclick="checkout()">Оформити замовлення</button>
+        <!-- платіжна форма LiqPay (HTML генерує payment-сервіс) -->
+        <div th:if="${liqpayForm}" th:utext="${liqpayForm}"></div>
     </div>
 
 </div>
 
 <script>
     function clearCart() {
-        window.location.href = "http://localhost:8080/cart/clear";
+        window.location.href = "/cart/clear";
+    }
+
+    function checkout() {
+        window.location.href = "/orders/checkout";
     }
 </script>
 

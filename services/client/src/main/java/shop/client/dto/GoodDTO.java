@@ -26,6 +26,6 @@ public class GoodDTO {
         return (double) (priceKopeck) / 100;
     }
     public String getImageBase64() {
-        return Base64.getEncoder().encodeToString(image);
+        return image == null ? "" : Base64.getEncoder().encodeToString(image);
     }
 }

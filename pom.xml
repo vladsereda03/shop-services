@@ -7,10 +7,13 @@
   <version>1.0-SNAPSHOT</version>
   <description>Core components of shop services</description>
   <modules>
+    <module>libs/contracts</module>
     <module>services/auth</module>
     <module>services/client</module>
     <module>services/product</module>
     <module>services/cart</module>
+    <module>services/order</module>
+    <module>services/payment</module>
   </modules>
   <parent>
     <groupId>org.springframework.boot</groupId>

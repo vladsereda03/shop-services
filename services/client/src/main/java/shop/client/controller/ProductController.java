@@ -1,6 +1,6 @@
 package shop.client.controller;
 
-import lombok.AllArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -10,27 +10,35 @@ import org.springframework.web.client.RestClient;
 import shop.client.dto.GoodDTO;
 import shop.client.dto.UserDTO;
 
-import java.security.Principal;
 import java.util.List;
 
 @Controller
-@AllArgsConstructor
 public class ProductController {
 
     private final RestClient restClient;
+    private final String authBaseUrl;
+    private final String productBaseUrl;
+
+    public ProductController(RestClient restClient,
+                             @Value("${services.auth.base-url}") String authBaseUrl,
+                             @Value("${services.product.base-url}") String productBaseUrl) {
+        this.restClient = restClient;
+        this.authBaseUrl = authBaseUrl;
+        this.productBaseUrl = productBaseUrl;
+    }
 
     @GetMapping("/")
-    public String showAll(Principal principal, Model model) {
-        String username = principal.getName();
-
+    public String showAll(Model model) {
         UserDTO userDto = restClient.get()
-                .uri("http://auth.local:9000/connect/userinfo", username)
+                .uri(authBaseUrl + "/connect/userinfo")
                 .retrieve()
                 .body(UserDTO.class);
 
         model.addAttribute("user", userDto);
 
-        List<GoodDTO> goodDTOS = restClient.get().uri("http://localhost:8082/goods").retrieve()
+        List<GoodDTO> goodDTOS = restClient.get()
+                .uri(productBaseUrl + "/api/products")
+                .retrieve()
                 .body(new ParameterizedTypeReference<List<GoodDTO>>() {});
         model.addAttribute("goods", goodDTOS);
 
@@ -38,22 +46,18 @@ public class ProductController {
     }
 
     @GetMapping("/goods/{id}")
-    public String showByID(Principal principal, @PathVariable("id") long id, Model model) {
-
-        String username = principal.getName();
-
+    public String showByID(@PathVariable("id") long id, Model model) {
         UserDTO userDto = restClient.get()
-                .uri("http://auth.local:9000/connect/userinfo", username)
+                .uri(authBaseUrl + "/connect/userinfo")
                 .retrieve()
                 .body(UserDTO.class);
 
         model.addAttribute("user", userDto);
 
-
-
-        GoodDTO goodDTO = restClient.get().uri("http://localhost:8082/goods/{id}", id).retrieve()
+        GoodDTO goodDTO = restClient.get()
+                .uri(productBaseUrl + "/api/products/{id}", id)
+                .retrieve()
                 .body(GoodDTO.class);
-
 
         model.addAttribute("good", goodDTO);
         model.addAttribute("isAvailable", goodDTO.getQuantity() > 0 ? "наявний" : "відсутній");
@@ -62,5 +66,3 @@ public class ProductController {
         return "assortment/good";
     }
 }
-
-

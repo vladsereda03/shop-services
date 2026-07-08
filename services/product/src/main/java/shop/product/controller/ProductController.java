@@ -4,20 +4,24 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.AllArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import shop.product.model.dto.GoodDTO;
 import shop.product.repository.GoodRepository;
+import shop.product.service.ProductService;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
 @AllArgsConstructor
-@RequestMapping("/goods")
+@RequestMapping("/api/products")
 public class ProductController {
 
     private final GoodRepository goodRepository;
+    private final ProductService productService;
 
     @GetMapping()
     public List<GoodDTO> getAll() {
@@ -32,5 +36,15 @@ public class ProductController {
         .orElseThrow(() -> new EntityNotFoundException("Good with id " + id + " not found"));
 
         return goodDTO;
+    }
+
+    @PostMapping("/{id}/reserve")
+    public void reserve(@PathVariable("id") long id, @RequestParam("quantity") int quantity) {
+        productService.reserve(id, quantity);
+    }
+
+    @PostMapping("/{id}/release")
+    public void release(@PathVariable("id") long id, @RequestParam("quantity") int quantity) {
+        productService.release(id, quantity);
     }
 }

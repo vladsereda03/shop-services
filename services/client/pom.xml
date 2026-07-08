@@ -14,17 +14,6 @@
     <name>client-service</name>
     <url>http://maven.apache.org</url>
 
-    <!-- todo: delete repository-->
-    <repositories>
-        <repository>
-            <id>repository</id>
-            <url>https://github.com/liqpay/sdk-java/raw/repository</url>
-            <snapshots>
-                <enabled>true</enabled>
-                <updatePolicy>always</updatePolicy>
-            </snapshots>
-        </repository>
-    </repositories>
     <licenses>
         <license/>
     </licenses>
@@ -81,33 +70,6 @@
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
-
-
-        <!-- todo: delete dependencies-->
-        <!-- https://mvnrepository.com/artifact/org.json/json -->
-        <dependency>
-            <groupId>org.json</groupId>
-            <artifactId>json</artifactId>
-            <version>20240303</version>
-        </dependency>
-        <!--Dependencies for liqpay -->
-        <dependency>
-            <groupId>com.liqpay</groupId>
-            <artifactId>liqpay-sdk</artifactId>
-            <version>0.8-SNAPSHOT</version>
-        </dependency>
-
-        <!-- //Spring Session Data Redis
-        <dependency>
-            <groupId>org.springframework.session</groupId>
-            <artifactId>spring-session-data-redis</artifactId>
-        </dependency>
-
-         //Spring Boot Starter Data Redis
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-redis</artifactId>
-        </dependency>-->
 
     </dependencies>
 </project>

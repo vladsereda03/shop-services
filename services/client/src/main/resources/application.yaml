@@ -4,10 +4,17 @@ server:
       persistent: false
   port: 8080
 
-liqpay:
-  key:
-    public: ${LIQPAY_PUBLIC_KEY}
-    private: ${LIQPAY_PRIVATE_KEY}
+services:
+  auth:
+    base-url: http://auth.local:9000
+  product:
+    base-url: http://product.local:8082
+  cart:
+    base-url: http://cart.local:8083
+  order:
+    base-url: http://localhost:8084
+  payment:
+    base-url: http://localhost:8085
 
 spring:
   security:
@@ -22,7 +29,7 @@ spring:
             provider: auth-service
             authorization-grant-type: authorization_code
             redirect-uri: "http://localhost:8080/login/oauth2/code/client"
-            scope: openid,profile
+            scope: openid,profile,products.read
         provider:
           auth-service:
             issuer-uri: http://auth.local:9000

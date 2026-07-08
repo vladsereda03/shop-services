@@ -8,7 +8,6 @@ import java.util.Map;
 
 @Access(AccessType.FIELD)
 @Entity
-@SequenceGenerator(name = "order_seq", sequenceName = "order_seq", allocationSize = 1)
 @NoArgsConstructor
 @AllArgsConstructor
 @Getter
@@ -25,22 +24,28 @@ public class Cart {
     private Long userId;
 
     @Builder.Default
-    @ElementCollection
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "cart_items", joinColumns = @JoinColumn(name = "cart_id"))
     @MapKeyColumn(name = "good_id")
     private Map<Long, CartItem> items = new HashMap<>();
 
-    public Cart(Map<Long, CartItem> items) {
-        this.items = items;
+    public void addItem(Long goodId, int quantity, long priceKopeck) {
+        items.merge(goodId, new CartItem(quantity, priceKopeck),
+                (existing, added) -> new CartItem(existing.getQuantity() + quantity, priceKopeck));
     }
 
-    public Cart(Cart cart) {
-        this.items = new HashMap<>(cart.getItems());
+    public void clearItems() {
+        items.clear();
+    }
+
+    public long calculatePriceKopeck() {
+        return items.values().stream()
+                .mapToLong(item -> item.getPriceKopeck() * item.getQuantity())
+                .sum();
     }
 
     public double calculatePrice() {
-        ////////////
-        return items.values().stream().mapToDouble(cartItem -> cartItem.priceKopeck * cartItem.getQuantity()).sum() / 100.0;
+        return calculatePriceKopeck() / 100.0;
     }
 
     @Embeddable
@@ -48,9 +53,13 @@ public class Cart {
     @Setter
     @AllArgsConstructor
     @NoArgsConstructor
-    public class CartItem {
+    public static class CartItem {
+        @Column(nullable = false)
         private Integer quantity;
-        private Double priceKopeck;
+
+        // price snapshot at the moment the item was put into the cart
+        @Column(nullable = false)
+        private Long priceKopeck;
     }
 
 }
