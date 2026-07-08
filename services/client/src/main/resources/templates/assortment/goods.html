@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<html lang="en" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <head>
     <meta charset="UTF-8">
     <title>Товари</title>
@@ -90,6 +91,11 @@
         .profile-actions button + button {
             margin-left: 10px;
         }
+
+        .profile-actions form {
+            display: inline;
+            margin-left: 10px;
+        }
     </style>
 </head>
 <body>
@@ -105,7 +111,11 @@
     <div class="profile-actions">
         <button onclick="goToCart()">Кошик</button>
         <button onclick="goToOrders()">Замовлення</button>
-        <button onclick="logout()">Вихід</button>
+        <button sec:authorize="hasRole('ADMIN')" onclick="goToAddGood()">Додати товар</button>
+        <form th:action="@{/logout}" method="post"
+              onsubmit="return confirm('Ви впевнені, що бажаєте вийти?')">
+            <button type="submit">Вихід</button>
+        </form>
     </div>
 </div>
 
@@ -118,10 +128,8 @@
         window.location.href = "/orders";
     }
 
-    function logout() {
-        if (window.confirm('Ви впевнені, що бажаєте вийти?')) {
-            window.location.href = "http://electropoint.hopto.org/account/logout";
-        }
+    function goToAddGood() {
+        window.location.href = "/goods/add";
     }
 
     var profileBtn = document.getElementById("profile-btn");

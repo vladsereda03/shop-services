@@ -21,6 +21,6 @@ public class RestClientConfig {
     }
 
     private static OAuth2ClientHttpRequestInterceptor.ClientRegistrationIdResolver clientRegistrationIdResolver() {
-        return (request) -> "order-api";
+        return (request) -> "shop-api";
     }
 }

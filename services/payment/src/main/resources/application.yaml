@@ -9,12 +9,35 @@ payment:
   # in a real deployment LiqPay must be able to reach these URLs from the internet
   result-url: http://localhost:8080/orders
   server-url: http://localhost:8085/payment/new
+  subscription:
+    # LiqPay sandbox does not support subscriptions, so by default the recurring
+    # charges are fully emulated by the local scheduler; enable with real keys in production
+    register-in-liqpay: ${LIQPAY_SUBSCRIBE_ENABLED:false}
+
+# local emulator of LiqPay recurring-charge callbacks (LiqPay cannot reach localhost)
+task:
+  cron:
+    day: 0 0 15 * * *      # daily 15:00
+    week: 0 0 15 * * MON   # weekly (Monday) 15:00
+    month: 0 0 15 1 * *    # monthly (1st day) 15:00
+    year: 0 0 15 1 1 *     # yearly (Jan 1st) 15:00
 
 services:
   order:
     base-url: http://localhost:8084
+  cart:
+    base-url: http://cart.local:8083
 
 spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/payments
+    username: postgres
+    password: postgres
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
   security:
     oauth2:
       resourceserver:
@@ -23,12 +46,13 @@ spring:
           jwk-set-uri: http://auth.local:9000/oauth2/jwks
       client:
         registration:
-          order-api:
+          # one registration for all service-to-service calls (order + cart)
+          shop-api:
             provider: auth-server
             client-id: payment-service
             client-secret: payment-service-secret
             authorization-grant-type: client_credentials
-            scope: orders.write
+            scope: orders.write,carts.read,carts.write
         provider:
           auth-server:
             token-uri: http://auth.local:9000/oauth2/token

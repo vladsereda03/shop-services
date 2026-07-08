@@ -146,6 +146,11 @@
     .profile-actions button + button {
       margin-left: 10px;
     }
+
+    .profile-actions form {
+      display: inline;
+      margin-left: 10px;
+    }
   </style>
 </head>
 <body>
@@ -161,7 +166,10 @@
   <div class="profile-actions">
     <button onclick="goToCart()">Кошик</button>
     <button onclick="goToOrders()">Замовлення</button>
-    <button onclick="logout()">Вихід</button>
+    <form th:action="@{/logout}" method="post"
+          onsubmit="return confirm('Ви впевнені, що бажаєте вийти?')">
+      <button type="submit">Вихід</button>
+    </form>
   </div>
 </div>
 
@@ -172,12 +180,6 @@
 
   function goToOrders() {
     window.location.href = "/orders";
-  }
-
-  function logout() {
-    if (window.confirm('Ви впевнені, що бажаєте вийти?')) {
-      window.location.href = "http://electropoint.hopto.org/account/logout";
-    }
   }
 
   var profileBtn = document.getElementById("profile-btn");

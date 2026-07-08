@@ -173,6 +173,8 @@ public class SecurityConfig {
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 .redirectUri("http://localhost:8080/login/oauth2/code/client")
+                // must exactly match post_logout_redirect_uri sent by the client on RP-initiated logout
+                .postLogoutRedirectUri("http://localhost:8080")
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
                 .scope(OidcScopes.EMAIL)
@@ -181,8 +183,10 @@ public class SecurityConfig {
                 .clientSettings(ClientSettings.builder().requireAuthorizationConsent(false)
                         .requireProofKey(false).build())
                 .tokenSettings(TokenSettings.builder()
-                        .accessTokenTimeToLive(java.time.Duration.ofMinutes(1))
-                        .refreshTokenTimeToLive(java.time.Duration.ofMinutes(5))
+                        // access must live noticeably longer than the client's 60s refresh
+                        // clock skew, otherwise every request triggers a token refresh
+                        .accessTokenTimeToLive(java.time.Duration.ofMinutes(5))
+                        .refreshTokenTimeToLive(java.time.Duration.ofMinutes(30))
                         .reuseRefreshTokens(false)
                         .build())
                 .build();
@@ -211,6 +215,9 @@ public class SecurityConfig {
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
                 .scope("orders.write")
+                // subscriptions: payment snapshots the cart and clears it after subscribing
+                .scope("carts.read")
+                .scope("carts.write")
                 .build();
 
         return new InMemoryRegisteredClientRepository(
@@ -234,6 +241,14 @@ public class SecurityConfig {
 
             // ID TOKEN
             if ("id_token".equals(context.getTokenType().getValue())) {
+
+                // the BFF (client) maps this claim to session roles — see its userAuthoritiesMapper
+                context.getClaims().claim(
+                        "authorities",
+                        user.getRoles().stream()
+                                .map(role -> "ROLE_" + role.name())
+                                .toList()
+                );
 
                 if (scopes.contains("profile")) {
                     context.getClaims().claim("fullName", user.getFullName());

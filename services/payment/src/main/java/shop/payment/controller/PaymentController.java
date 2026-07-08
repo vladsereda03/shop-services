@@ -37,6 +37,13 @@ public class PaymentController {
         paymentCallbackService.processPaymentCallback(data, signature);
     }
 
+    // LiqPay callback for recurring subscription charges
+    @PostMapping("/subscription/payment")
+    public void subscriptionCallback(@RequestParam("data") String data,
+                                     @RequestParam("signature") String signature) {
+        paymentCallbackService.processSubscriptionCallback(data, signature);
+    }
+
     private Long currentUserId(Jwt jwt) {
         Object uid = jwt.getClaim("uid");
         if (uid instanceof Number number) {

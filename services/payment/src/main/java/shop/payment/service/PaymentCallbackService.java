@@ -11,6 +11,8 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
 import shop.payment.config.LiqPayProperties;
+import shop.payment.model.Subscription;
+import shop.payment.repository.SubscriptionRepository;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -29,6 +31,8 @@ public class PaymentCallbackService {
 
     private final LiqPayProperties liqPayProperties;
     private final RestClient restClient;
+    private final SubscriptionRepository subscriptionRepository;
+    private final SubscriptionService subscriptionService;
 
     @Value("${services.order.base-url}")
     private String orderBaseUrl;
@@ -62,6 +66,42 @@ public class PaymentCallbackService {
             // cart is already empty — most likely a duplicate callback; answer 200 so LiqPay stops retrying
             logger.warn("LiqPay callback for user {} skipped: cart is empty (duplicate callback?)", userId);
         }
+    }
+
+    // recurring subscription charge: LiqPay debited the card, we turn the snapshot into an order
+    public void processSubscriptionCallback(String data, String signature) {
+        if (!expectedSignature(data).equals(signature)) {
+            logger.warn("LiqPay subscription callback rejected: signature mismatch");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid LiqPay signature");
+        }
+
+        JSONObject payload = new JSONObject(new String(Base64.getDecoder().decode(data), StandardCharsets.UTF_8));
+        String status = payload.optString("status");
+        String orderId = payload.optString("order_id");
+
+        if (!PAID_STATUSES.contains(status)) {
+            // e.g. "subscribed" (subscription registered) or a failed charge — nothing to ship
+            logger.info("LiqPay subscription callback for order_id {} ignored: status '{}'", orderId, status);
+            return;
+        }
+
+        long subscriptionId;
+        try {
+            subscriptionId = Long.parseLong(orderId);
+        } catch (NumberFormatException e) {
+            logger.warn("LiqPay subscription callback ignored: order_id '{}' is not a subscription id", orderId);
+            return;
+        }
+
+        Subscription subscription = subscriptionRepository.findById(subscriptionId).orElse(null);
+        if (subscription == null) {
+            // charge for a subscription we don't have (e.g. rolled back at subscribe time)
+            logger.warn("LiqPay subscription callback ignored: subscription {} not found", subscriptionId);
+            return;
+        }
+
+        subscriptionService.createOrderFromSubscription(subscription);
+        logger.info("LiqPay recurring payment confirmed for subscription {}", subscriptionId);
     }
 
     // LiqPay signature formula: base64(sha1(private_key + data + private_key))

@@ -61,6 +61,9 @@
     <div th:if="${orderError}" th:text="${orderError}"
          style="background-color: #b33; color: #fff; padding: 10px; border-radius: 5px; margin-bottom: 10px;"></div>
 
+    <div th:if="${subscriptionSuccess}" th:text="${subscriptionSuccess}"
+         style="background-color: #14532d; color: #fff; padding: 10px; border-radius: 5px; margin-bottom: 10px;"></div>
+
     <div class="cart-item" th:each="item : ${items}">
         <span>
             <span th:text="${item.name} + ': '"></span><span th:text="${item.quantity} + ' од.'"></span>
@@ -75,6 +78,7 @@
     <div class="actions">
         <button class="btn" id="clear-cart" onclick="clearCart()">Очистити кошик</button>
         <button class="btn" id="checkout" onclick="checkout()">Оформити замовлення</button>
+        <button class="btn" id="subscribe" onclick="goToSubscriptionForm()">Регулярна підписка</button>
         <!-- платіжна форма LiqPay (HTML генерує payment-сервіс) -->
         <div th:if="${liqpayForm}" th:utext="${liqpayForm}"></div>
     </div>
@@ -88,6 +92,10 @@
 
     function checkout() {
         window.location.href = "/orders/checkout";
+    }
+
+    function goToSubscriptionForm() {
+        window.location.href = "/subscription/new";
     }
 </script>
 
