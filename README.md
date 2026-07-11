@@ -1,5 +1,7 @@
 # Shop Services
 
+[![CI](https://github.com/FlAsHeR07/shop-services/actions/workflows/ci.yml/badge.svg)](https://github.com/FlAsHeR07/shop-services/actions/workflows/ci.yml)
+
 An educational e-commerce project. Users browse a catalog, manage a cart, place orders,
 pay via [LiqPay](https://www.liqpay.ua/) and set up recurring subscriptions;
 administrators manage the catalog.
