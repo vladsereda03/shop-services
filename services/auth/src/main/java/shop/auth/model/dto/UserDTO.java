@@ -10,27 +10,28 @@ import lombok.Setter;
 @NoArgsConstructor
 public class UserDTO {
 
-    public interface PublicView {}
-    public interface InternalView extends PublicView {}
+  public interface PublicView {}
 
-    @JsonView(PublicView.class)
-    private String username;
+  public interface InternalView extends PublicView {}
 
-    private String password;
+  @JsonView(PublicView.class)
+  private String username;
 
-    @JsonView(InternalView.class)
-    private String email;
+  private String password;
 
-    @JsonView(PublicView.class)
-    private String fullName;
+  @JsonView(InternalView.class)
+  private String email;
 
-    @JsonView(InternalView.class)
-    private String phone;
+  @JsonView(PublicView.class)
+  private String fullName;
 
-    public UserDTO(String username, String email, String fullName, String phone) {
-        this.username = username;
-        this.email = email;
-        this.fullName = fullName;
-        this.phone = phone;
-    }
+  @JsonView(InternalView.class)
+  private String phone;
+
+  public UserDTO(String username, String email, String fullName, String phone) {
+    this.username = username;
+    this.email = email;
+    this.fullName = fullName;
+    this.phone = phone;
+  }
 }

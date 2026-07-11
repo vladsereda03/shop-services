@@ -1,12 +1,11 @@
 package shop.payment.model.dto;
 
+import java.time.LocalDate;
+import java.time.LocalTime;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.time.LocalDate;
-import java.time.LocalTime;
 
 // subscription request filled by the user on the client's subscription page
 @Getter
@@ -15,12 +14,12 @@ import java.time.LocalTime;
 @AllArgsConstructor
 public class SubscriptionForm {
 
-    private String phone;
-    private LocalTime startTime;
-    private LocalDate startDate;
-    private String periodicity;
-    private String cardNumber;
-    private int expMonth;
-    private int expYear;
-    private String cvv;
+  private String phone;
+  private LocalTime startTime;
+  private LocalDate startDate;
+  private String periodicity;
+  private String cardNumber;
+  private int expMonth;
+  private int expYear;
+  private String cvv;
 }

@@ -19,30 +19,31 @@ import shop.cart.service.CartService;
 @RequestMapping("/carts")
 public class CartController {
 
-    private final CartService cartService;
+  private final CartService cartService;
 
-    @GetMapping("/my")
-    public CartDTO myCart(@AuthenticationPrincipal Jwt jwt) {
-        return CartDTO.from(cartService.getOrCreateCart(currentUserId(jwt)));
-    }
+  @GetMapping("/my")
+  public CartDTO myCart(@AuthenticationPrincipal Jwt jwt) {
+    return CartDTO.from(cartService.getOrCreateCart(currentUserId(jwt)));
+  }
 
-    @PostMapping("/my/items")
-    public CartDTO addItem(@AuthenticationPrincipal Jwt jwt,
-                           @RequestParam("goodId") Long goodId,
-                           @RequestParam("quantity") int quantity) {
-        return CartDTO.from(cartService.addItem(currentUserId(jwt), goodId, quantity));
-    }
+  @PostMapping("/my/items")
+  public CartDTO addItem(
+      @AuthenticationPrincipal Jwt jwt,
+      @RequestParam("goodId") Long goodId,
+      @RequestParam("quantity") int quantity) {
+    return CartDTO.from(cartService.addItem(currentUserId(jwt), goodId, quantity));
+  }
 
-    @DeleteMapping("/my")
-    public CartDTO clearCart(@AuthenticationPrincipal Jwt jwt) {
-        return CartDTO.from(cartService.clearCart(currentUserId(jwt)));
-    }
+  @DeleteMapping("/my")
+  public CartDTO clearCart(@AuthenticationPrincipal Jwt jwt) {
+    return CartDTO.from(cartService.clearCart(currentUserId(jwt)));
+  }
 
-    private Long currentUserId(Jwt jwt) {
-        Object uid = jwt.getClaim("uid");
-        if (uid instanceof Number number) {
-            return number.longValue();
-        }
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access token has no uid claim");
+  private Long currentUserId(Jwt jwt) {
+    Object uid = jwt.getClaim("uid");
+    if (uid instanceof Number number) {
+      return number.longValue();
     }
+    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access token has no uid claim");
+  }
 }

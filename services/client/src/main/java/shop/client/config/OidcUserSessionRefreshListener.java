@@ -16,21 +16,21 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 @Component
 public class OidcUserSessionRefreshListener implements ApplicationListener<OidcUserRefreshedEvent> {
 
-    private final SecurityContextRepository securityContextRepository =
-            new HttpSessionSecurityContextRepository();
+  private final SecurityContextRepository securityContextRepository =
+      new HttpSessionSecurityContextRepository();
 
-    @Override
-    public void onApplicationEvent(OidcUserRefreshedEvent event) {
-        SecurityContext context = SecurityContextHolder.createEmptyContext();
-        context.setAuthentication(event.getAuthentication());
-        SecurityContextHolder.setContext(context);
+  @Override
+  public void onApplicationEvent(OidcUserRefreshedEvent event) {
+    SecurityContext context = SecurityContextHolder.createEmptyContext();
+    context.setAuthentication(event.getAuthentication());
+    SecurityContextHolder.setContext(context);
 
-        // token refresh always happens while serving an HTTP request, so the request
-        // is available here; guard anyway in case that ever changes
-        if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes
-                && attributes.getResponse() != null) {
-            securityContextRepository.saveContext(context,
-                    attributes.getRequest(), attributes.getResponse());
-        }
+    // token refresh always happens while serving an HTTP request, so the request
+    // is available here; guard anyway in case that ever changes
+    if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes
+        && attributes.getResponse() != null) {
+      securityContextRepository.saveContext(
+          context, attributes.getRequest(), attributes.getResponse());
     }
+  }
 }

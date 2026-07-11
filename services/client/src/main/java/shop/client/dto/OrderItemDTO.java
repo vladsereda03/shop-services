@@ -11,7 +11,7 @@ import lombok.Setter;
 @AllArgsConstructor
 public class OrderItemDTO {
 
-    private Long goodId;
-    private Integer quantity;
-    private Long priceKopeck;
+  private Long goodId;
+  private Integer quantity;
+  private Long priceKopeck;
 }

@@ -14,39 +14,38 @@ import org.thymeleaf.spring6.view.ThymeleafViewResolver;
 @SpringBootApplication
 public class AuthApplication implements WebMvcConfigurer {
 
-    public static void main(String[] args) {
-        SpringApplication.run(AuthApplication.class, args);
-    }
+  public static void main(String[] args) {
+    SpringApplication.run(AuthApplication.class, args);
+  }
 
-    private final ApplicationContext applicationContext;
+  private final ApplicationContext applicationContext;
 
-    @Autowired
-    public AuthApplication(ApplicationContext applicationContext) {
-        this.applicationContext = applicationContext;
-    }
+  @Autowired
+  public AuthApplication(ApplicationContext applicationContext) {
+    this.applicationContext = applicationContext;
+  }
 
-    @Bean
-    public SpringResourceTemplateResolver templateResolver() {
-        SpringResourceTemplateResolver templateResolver = new SpringResourceTemplateResolver();
-        templateResolver.setApplicationContext(applicationContext);
-        templateResolver.setPrefix("classpath:/templates/");
-        templateResolver.setSuffix(".html");
-        return templateResolver;
-    }
+  @Bean
+  public SpringResourceTemplateResolver templateResolver() {
+    SpringResourceTemplateResolver templateResolver = new SpringResourceTemplateResolver();
+    templateResolver.setApplicationContext(applicationContext);
+    templateResolver.setPrefix("classpath:/templates/");
+    templateResolver.setSuffix(".html");
+    return templateResolver;
+  }
 
-    @Bean
-    public SpringTemplateEngine templateEngine() {
-        SpringTemplateEngine templateEngine = new SpringTemplateEngine();
-        templateEngine.setTemplateResolver(templateResolver());
-        templateEngine.setEnableSpringELCompiler(true);
-        return templateEngine;
-    }
+  @Bean
+  public SpringTemplateEngine templateEngine() {
+    SpringTemplateEngine templateEngine = new SpringTemplateEngine();
+    templateEngine.setTemplateResolver(templateResolver());
+    templateEngine.setEnableSpringELCompiler(true);
+    return templateEngine;
+  }
 
-    @Override
-    public void configureViewResolvers(ViewResolverRegistry registry) {
-        ThymeleafViewResolver resolver = new ThymeleafViewResolver();
-        resolver.setTemplateEngine(templateEngine());
-        registry.viewResolver(resolver);
-    }
-
+  @Override
+  public void configureViewResolvers(ViewResolverRegistry registry) {
+    ThymeleafViewResolver resolver = new ThymeleafViewResolver();
+    resolver.setTemplateEngine(templateEngine());
+    registry.viewResolver(resolver);
+  }
 }

@@ -11,6 +11,6 @@ import lombok.Setter;
 @Setter
 public class UserRegisteredEvent {
 
-    private Long userId;
-    private String username;
+  private Long userId;
+  private String username;
 }

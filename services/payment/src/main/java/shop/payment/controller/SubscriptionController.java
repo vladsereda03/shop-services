@@ -1,5 +1,6 @@
 package shop.payment.controller;
 
+import java.util.List;
 import lombok.AllArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -14,34 +15,32 @@ import shop.payment.model.dto.SubscriptionDTO;
 import shop.payment.model.dto.SubscriptionForm;
 import shop.payment.service.SubscriptionService;
 
-import java.util.List;
-
 @RestController
 @AllArgsConstructor
 @RequestMapping("/subscriptions")
 public class SubscriptionController {
 
-    private final SubscriptionService subscriptionService;
+  private final SubscriptionService subscriptionService;
 
-    // subscribe the current cart: called server-side by the client BFF
-    @PostMapping("/my")
-    public SubscriptionDTO subscribe(@AuthenticationPrincipal Jwt jwt,
-                                     @RequestBody SubscriptionForm form) {
-        return SubscriptionDTO.from(subscriptionService.subscribe(currentUserId(jwt), form));
-    }
+  // subscribe the current cart: called server-side by the client BFF
+  @PostMapping("/my")
+  public SubscriptionDTO subscribe(
+      @AuthenticationPrincipal Jwt jwt, @RequestBody SubscriptionForm form) {
+    return SubscriptionDTO.from(subscriptionService.subscribe(currentUserId(jwt), form));
+  }
 
-    @GetMapping("/my")
-    public List<SubscriptionDTO> mySubscriptions(@AuthenticationPrincipal Jwt jwt) {
-        return subscriptionService.getMySubscriptions(currentUserId(jwt)).stream()
-                .map(SubscriptionDTO::from)
-                .toList();
-    }
+  @GetMapping("/my")
+  public List<SubscriptionDTO> mySubscriptions(@AuthenticationPrincipal Jwt jwt) {
+    return subscriptionService.getMySubscriptions(currentUserId(jwt)).stream()
+        .map(SubscriptionDTO::from)
+        .toList();
+  }
 
-    private Long currentUserId(Jwt jwt) {
-        Object uid = jwt.getClaim("uid");
-        if (uid instanceof Number number) {
-            return number.longValue();
-        }
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access token has no uid claim");
+  private Long currentUserId(Jwt jwt) {
+    Object uid = jwt.getClaim("uid");
+    if (uid instanceof Number number) {
+      return number.longValue();
     }
+    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access token has no uid claim");
+  }
 }

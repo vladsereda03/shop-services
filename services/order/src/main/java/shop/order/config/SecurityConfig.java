@@ -20,35 +20,36 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableWebSecurity
 public class SecurityConfig {
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        return http
-                .csrf(AbstractHttpConfigurer::disable)
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        // service-to-service API (payment callback): client_credentials token
-                        .requestMatchers(HttpMethod.POST, "/internal/orders/**").hasAuthority("SCOPE_orders.write")
-                        .anyRequest().authenticated()
-                )
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
-                .build();
-    }
+  @Bean
+  public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    return http.csrf(AbstractHttpConfigurer::disable)
+        .sessionManagement(
+            session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        .authorizeHttpRequests(
+            auth ->
+                auth
+                    // service-to-service API (payment callback): client_credentials token
+                    .requestMatchers(HttpMethod.POST, "/internal/orders/**")
+                    .hasAuthority("SCOPE_orders.write")
+                    .anyRequest()
+                    .authenticated())
+        .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
+        .build();
+  }
 
-    @Bean
-    public OAuth2AuthorizedClientManager authorizedClientManager(
-            ClientRegistrationRepository clientRegistrationRepository,
-            OAuth2AuthorizedClientRepository authorizedClientRepository) {
+  @Bean
+  public OAuth2AuthorizedClientManager authorizedClientManager(
+      ClientRegistrationRepository clientRegistrationRepository,
+      OAuth2AuthorizedClientRepository authorizedClientRepository) {
 
-        OAuth2AuthorizedClientProvider authorizedClientProvider =
-                OAuth2AuthorizedClientProviderBuilder.builder()
-                        .clientCredentials()
-                        .build();
+    OAuth2AuthorizedClientProvider authorizedClientProvider =
+        OAuth2AuthorizedClientProviderBuilder.builder().clientCredentials().build();
 
-        DefaultOAuth2AuthorizedClientManager authorizedClientManager =
-                new DefaultOAuth2AuthorizedClientManager(
-                        clientRegistrationRepository, authorizedClientRepository);
-        authorizedClientManager.setAuthorizedClientProvider(authorizedClientProvider);
+    DefaultOAuth2AuthorizedClientManager authorizedClientManager =
+        new DefaultOAuth2AuthorizedClientManager(
+            clientRegistrationRepository, authorizedClientRepository);
+    authorizedClientManager.setAuthorizedClientProvider(authorizedClientProvider);
 
-        return authorizedClientManager;
-    }
+    return authorizedClientManager;
+  }
 }

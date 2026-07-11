@@ -21,41 +21,45 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableWebSecurity
 public class SecurityConfig {
 
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        return http
-                .csrf(AbstractHttpConfigurer::disable)
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        // error dispatch must stay open, otherwise an anonymous caller (LiqPay)
-                        // gets 401 from the resource server instead of the real error status
-                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
-                        // LiqPay server-to-server callbacks: no JWT, authenticity is checked by signature
-                        .requestMatchers(HttpMethod.POST, "/payment/new").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/subscription/payment").permitAll()
-                        .anyRequest().authenticated()
-                )
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
-                .build();
-    }
+  @Bean
+  public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    return http.csrf(AbstractHttpConfigurer::disable)
+        .sessionManagement(
+            session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        .authorizeHttpRequests(
+            auth ->
+                auth
+                    // error dispatch must stay open, otherwise an anonymous caller (LiqPay)
+                    // gets 401 from the resource server instead of the real error status
+                    .dispatcherTypeMatchers(DispatcherType.ERROR)
+                    .permitAll()
+                    // LiqPay server-to-server callbacks: no JWT, authenticity is checked by
+                    // signature
+                    .requestMatchers(HttpMethod.POST, "/payment/new")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.POST, "/subscription/payment")
+                    .permitAll()
+                    .anyRequest()
+                    .authenticated())
+        .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
+        .build();
+  }
 
-    // service-manager variant (not the Default web one): payment calls other services
-    // from the scheduler thread too, where no HttpServletRequest exists
-    @Bean
-    public OAuth2AuthorizedClientManager authorizedClientManager(
-            ClientRegistrationRepository clientRegistrationRepository,
-            OAuth2AuthorizedClientService authorizedClientService) {
+  // service-manager variant (not the Default web one): payment calls other services
+  // from the scheduler thread too, where no HttpServletRequest exists
+  @Bean
+  public OAuth2AuthorizedClientManager authorizedClientManager(
+      ClientRegistrationRepository clientRegistrationRepository,
+      OAuth2AuthorizedClientService authorizedClientService) {
 
-        OAuth2AuthorizedClientProvider authorizedClientProvider =
-                OAuth2AuthorizedClientProviderBuilder.builder()
-                        .clientCredentials()
-                        .build();
+    OAuth2AuthorizedClientProvider authorizedClientProvider =
+        OAuth2AuthorizedClientProviderBuilder.builder().clientCredentials().build();
 
-        AuthorizedClientServiceOAuth2AuthorizedClientManager authorizedClientManager =
-                new AuthorizedClientServiceOAuth2AuthorizedClientManager(
-                        clientRegistrationRepository, authorizedClientService);
-        authorizedClientManager.setAuthorizedClientProvider(authorizedClientProvider);
+    AuthorizedClientServiceOAuth2AuthorizedClientManager authorizedClientManager =
+        new AuthorizedClientServiceOAuth2AuthorizedClientManager(
+            clientRegistrationRepository, authorizedClientService);
+    authorizedClientManager.setAuthorizedClientProvider(authorizedClientProvider);
 
-        return authorizedClientManager;
-    }
+    return authorizedClientManager;
+  }
 }

@@ -17,38 +17,39 @@ import shop.payment.service.PaymentCallbackService;
 @AllArgsConstructor
 public class PaymentController {
 
-    private final OrderGenerator orderGenerator;
-    private final PaymentCallbackService paymentCallbackService;
+  private final OrderGenerator orderGenerator;
+  private final PaymentCallbackService paymentCallbackService;
 
-    // called server-side by the client BFF; returns an HTML form to embed on the cart page
-    @GetMapping("/payments/form")
-    public String paymentForm(@AuthenticationPrincipal Jwt jwt,
-                              @RequestParam("amount") double amount) {
-        if (amount <= 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Amount must be positive");
-        }
-        return orderGenerator.createPaymentFormHtml(currentUserId(jwt), amount, SupportedCurrency.UAH);
+  // called server-side by the client BFF; returns an HTML form to embed on the cart page
+  @GetMapping("/payments/form")
+  public String paymentForm(
+      @AuthenticationPrincipal Jwt jwt, @RequestParam("amount") double amount) {
+    if (amount <= 0) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Amount must be positive");
     }
+    return orderGenerator.createPaymentFormHtml(currentUserId(jwt), amount, SupportedCurrency.UAH);
+  }
 
-    // LiqPay server-to-server callback (server_url); open in SecurityConfig, authenticity is the signature
-    @PostMapping("/payment/new")
-    public void paymentCallback(@RequestParam("data") String data,
-                                @RequestParam("signature") String signature) {
-        paymentCallbackService.processPaymentCallback(data, signature);
-    }
+  // LiqPay server-to-server callback (server_url); open in SecurityConfig, authenticity is the
+  // signature
+  @PostMapping("/payment/new")
+  public void paymentCallback(
+      @RequestParam("data") String data, @RequestParam("signature") String signature) {
+    paymentCallbackService.processPaymentCallback(data, signature);
+  }
 
-    // LiqPay callback for recurring subscription charges
-    @PostMapping("/subscription/payment")
-    public void subscriptionCallback(@RequestParam("data") String data,
-                                     @RequestParam("signature") String signature) {
-        paymentCallbackService.processSubscriptionCallback(data, signature);
-    }
+  // LiqPay callback for recurring subscription charges
+  @PostMapping("/subscription/payment")
+  public void subscriptionCallback(
+      @RequestParam("data") String data, @RequestParam("signature") String signature) {
+    paymentCallbackService.processSubscriptionCallback(data, signature);
+  }
 
-    private Long currentUserId(Jwt jwt) {
-        Object uid = jwt.getClaim("uid");
-        if (uid instanceof Number number) {
-            return number.longValue();
-        }
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access token has no uid claim");
+  private Long currentUserId(Jwt jwt) {
+    Object uid = jwt.getClaim("uid");
+    if (uid instanceof Number number) {
+      return number.longValue();
     }
+    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access token has no uid claim");
+  }
 }

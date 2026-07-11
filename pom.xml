@@ -52,6 +52,7 @@
     <maven.compiler.source>21</maven.compiler.source>
     <maven.compiler.target>21</maven.compiler.target>
     <spring-cloud.version>2023.0.2</spring-cloud.version>
+    <spotless.version>2.44.5</spotless.version>
   </properties>
 
   <dependencyManagement>
@@ -103,6 +104,18 @@
               <artifactId>lombok</artifactId>
             </exclude>
           </excludes>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+        <version>${spotless.version}</version>
+        <configuration>
+          <java>
+            <removeUnusedImports/>
+            <googleJavaFormat/>
+          </java>
         </configuration>
       </plugin>
 

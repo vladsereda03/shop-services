@@ -15,15 +15,15 @@ import shop.cart.service.CartService;
 @RequestMapping("/internal/carts")
 public class InternalCartController {
 
-    private final CartService cartService;
+  private final CartService cartService;
 
-    @GetMapping("/{userId}")
-    public CartDTO cartOfUser(@PathVariable("userId") Long userId) {
-        return CartDTO.from(cartService.getOrCreateCart(userId));
-    }
+  @GetMapping("/{userId}")
+  public CartDTO cartOfUser(@PathVariable("userId") Long userId) {
+    return CartDTO.from(cartService.getOrCreateCart(userId));
+  }
 
-    @PostMapping("/{userId}/checkout-clear")
-    public CartDTO checkoutClear(@PathVariable("userId") Long userId) {
-        return CartDTO.from(cartService.clearAfterCheckout(userId));
-    }
+  @PostMapping("/{userId}/checkout-clear")
+  public CartDTO checkoutClear(@PathVariable("userId") Long userId) {
+    return CartDTO.from(cartService.clearAfterCheckout(userId));
+  }
 }

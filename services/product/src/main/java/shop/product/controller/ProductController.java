@@ -1,6 +1,8 @@
 package shop.product.controller;
 
 import jakarta.persistence.EntityNotFoundException;
+import java.util.List;
+import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,45 +16,45 @@ import shop.product.model.dto.GoodDTO;
 import shop.product.repository.GoodRepository;
 import shop.product.service.ProductService;
 
-import java.util.List;
-import java.util.stream.Collectors;
-
 @RestController
 @AllArgsConstructor
 @RequestMapping("/api/products")
 public class ProductController {
 
-    private final GoodRepository goodRepository;
-    private final ProductService productService;
+  private final GoodRepository goodRepository;
+  private final ProductService productService;
 
-    @GetMapping()
-    public List<GoodDTO> getAll() {
+  @GetMapping()
+  public List<GoodDTO> getAll() {
 
-        return goodRepository.findAll().stream().map(GoodDTO::new).collect(Collectors.toList());
-    }
+    return goodRepository.findAll().stream().map(GoodDTO::new).collect(Collectors.toList());
+  }
 
-    @GetMapping("/{id}")
-    public GoodDTO getById(@PathVariable("id") long id) {
+  @GetMapping("/{id}")
+  public GoodDTO getById(@PathVariable("id") long id) {
 
-        GoodDTO goodDTO = goodRepository.findById(id).map(GoodDTO::new)
-        .orElseThrow(() -> new EntityNotFoundException("Good with id " + id + " not found"));
+    GoodDTO goodDTO =
+        goodRepository
+            .findById(id)
+            .map(GoodDTO::new)
+            .orElseThrow(() -> new EntityNotFoundException("Good with id " + id + " not found"));
 
-        return goodDTO;
-    }
+    return goodDTO;
+  }
 
-    // catalog management: requires the ADMIN role (see SecurityConfig)
-    @PostMapping()
-    public GoodDTO create(@RequestBody CreateGoodRequest request) {
-        return new GoodDTO(productService.createGood(request));
-    }
+  // catalog management: requires the ADMIN role (see SecurityConfig)
+  @PostMapping()
+  public GoodDTO create(@RequestBody CreateGoodRequest request) {
+    return new GoodDTO(productService.createGood(request));
+  }
 
-    @PostMapping("/{id}/reserve")
-    public void reserve(@PathVariable("id") long id, @RequestParam("quantity") int quantity) {
-        productService.reserve(id, quantity);
-    }
+  @PostMapping("/{id}/reserve")
+  public void reserve(@PathVariable("id") long id, @RequestParam("quantity") int quantity) {
+    productService.reserve(id, quantity);
+  }
 
-    @PostMapping("/{id}/release")
-    public void release(@PathVariable("id") long id, @RequestParam("quantity") int quantity) {
-        productService.release(id, quantity);
-    }
+  @PostMapping("/{id}/release")
+  public void release(@PathVariable("id") long id, @RequestParam("quantity") int quantity) {
+    productService.release(id, quantity);
+  }
 }
