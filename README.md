@@ -51,8 +51,10 @@ administrators manage the catalog.
 ### Prerequisites
 
 - Java 21, Maven 3.9+
-- PostgreSQL on `localhost:5432` with databases `authDB`, `products`, `carts`,
-  `orders`, `payments` (schemas are created by Hibernate on first run)
+- PostgreSQL on `localhost:5432` with (empty) databases `authDB`, `products`,
+  `carts`, `orders`, `payments` — each service creates and versions its schema
+  with [Flyway](https://flywaydb.org/) migrations on startup (`ddl-auto` is set
+  to `validate`; a pre-existing database is baselined automatically)
 - Docker (for Kafka and the Testcontainers-based integration tests)
 
 ### 1. Hosts entries
@@ -70,12 +72,9 @@ OIDC issuer to match), add to your hosts file:
 
 | Variable | Used by | Default | Purpose |
 |---|---|---|---|
-| `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD` | auth | — (required) | Credentials for `authDB` |
+| `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD` | all services | — (required) | PostgreSQL credentials (shared by all five databases) |
 | `LIQPAY_PUBLIC_KEY` / `LIQPAY_PRIVATE_KEY` | payment | `sandbox_public_key` / `sandbox_private_key` | LiqPay merchant keys; sandbox keys from your LiqPay account are needed only to render the real payment form |
 | `LIQPAY_SUBSCRIBE_ENABLED` | payment | `false` | Register subscriptions in the LiqPay API. Keep `false` with sandbox keys — the LiqPay sandbox does not support subscriptions, so the built-in scheduler emulates recurring charges instead |
-
-Other services use `postgres`/`postgres` for their databases (dev defaults in
-`application.yaml`).
 
 ### 3. Kafka
 
@@ -95,7 +94,8 @@ mvn package
 This also runs the test suite (Docker must be running for the cart integration
 tests); use `mvn package -DskipTests` to skip it.
 
-Then start each service (in any order):
+Then start the services — auth first (the OAuth2 clients fetch its OIDC
+configuration at startup), the rest in any order:
 
 ```
 java -jar services/auth/target/auth-1.0-SNAPSHOT.jar
@@ -110,11 +110,9 @@ Open **http://localhost:8080**, register a user and log in.
 
 ### 5. Seed data
 
-- **Manufacturers** are seeded directly in the `products` database (there is no
-  admin UI for them):
-  ```sql
-  INSERT INTO manufacturer (name, contacts, description) VALUES ('ACME', 'acme@example.com', '...');
-  ```
+- **Manufacturers** are seeded by the `product` service's Flyway migration
+  (there is no admin UI for them); to add more, create a `V2__*.sql` migration
+  or insert directly into the `products` database.
 - **Admin role** — grant it in `authDB` to unlock catalog management in the UI:
   ```sql
   INSERT INTO user_roles (user_id, roles)
