@@ -21,3 +21,15 @@ spring:
         jwt:
           issuer-uri: http://auth.local:9000
           jwk-set-uri: http://auth.local:9000/oauth2/jwks
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # only what we consume: health for container probes, prometheus for scraping
+        include: health, prometheus
+  endpoint:
+    health:
+      probes:
+        # adds /actuator/health/liveness and /actuator/health/readiness
+        enabled: true

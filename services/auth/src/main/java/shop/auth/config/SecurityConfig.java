@@ -112,6 +112,10 @@ public class SecurityConfig {
     http.authorizeHttpRequests(
             authz ->
                 authz
+                    // observability endpoints: probed by Docker healthchecks and Prometheus
+                    // from inside the compose network, no session there
+                    .requestMatchers("/actuator/health/**", "/actuator/prometheus")
+                    .permitAll()
                     .requestMatchers("/account/signup/**")
                     .permitAll() // open registration
                     .requestMatchers("/account/login/**")

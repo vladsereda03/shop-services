@@ -1,0 +1,14 @@
+# Grafana datasource provisioning: registers the Prometheus datasource at
+# startup, so no manual "Add data source" clicking is needed. The whole
+# provisioning directory is mounted read-only into /etc/grafana/provisioning
+# by the root docker-compose.yaml.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy # Grafana backend proxies queries to Prometheus
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false

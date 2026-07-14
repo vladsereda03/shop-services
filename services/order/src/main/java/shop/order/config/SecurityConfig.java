@@ -28,6 +28,10 @@ public class SecurityConfig {
         .authorizeHttpRequests(
             auth ->
                 auth
+                    // observability endpoints: probed by Docker healthchecks and Prometheus
+                    // from inside the compose network, no token available there
+                    .requestMatchers("/actuator/health/**", "/actuator/prometheus")
+                    .permitAll()
                     // service-to-service API (payment callback): client_credentials token
                     .requestMatchers(HttpMethod.POST, "/internal/orders/**")
                     .hasAuthority("SCOPE_orders.write")

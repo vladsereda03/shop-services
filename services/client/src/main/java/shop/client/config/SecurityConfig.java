@@ -37,7 +37,15 @@ public class SecurityConfig {
 
     http.authorizeHttpRequests(
             auth ->
-                auth.requestMatchers("/goods/add").hasRole("ADMIN").anyRequest().authenticated())
+                auth
+                    // observability endpoints: probed by Docker healthchecks and Prometheus
+                    // from inside the compose network, no session there
+                    .requestMatchers("/actuator/health/**", "/actuator/prometheus")
+                    .permitAll()
+                    .requestMatchers("/goods/add")
+                    .hasRole("ADMIN")
+                    .anyRequest()
+                    .authenticated())
         .oauth2Client(Customizer.withDefaults())
         .oauth2Login(
             oauth2 ->

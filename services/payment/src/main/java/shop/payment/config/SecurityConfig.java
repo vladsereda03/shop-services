@@ -33,6 +33,10 @@ public class SecurityConfig {
                     // gets 401 from the resource server instead of the real error status
                     .dispatcherTypeMatchers(DispatcherType.ERROR)
                     .permitAll()
+                    // observability endpoints: probed by Docker healthchecks and Prometheus
+                    // from inside the compose network, no token available there
+                    .requestMatchers("/actuator/health/**", "/actuator/prometheus")
+                    .permitAll()
                     // LiqPay server-to-server callbacks: no JWT, authenticity is checked by
                     // signature
                     .requestMatchers(HttpMethod.POST, "/payment/new")

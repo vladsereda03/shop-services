@@ -46,3 +46,15 @@ spring:
         provider:
           auth-server:
             token-uri: http://auth.local:9000/oauth2/token
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # only what we consume: health for container probes, prometheus for scraping
+        include: health, prometheus
+  endpoint:
+    health:
+      probes:
+        # adds /actuator/health/liveness and /actuator/health/readiness
+        enabled: true

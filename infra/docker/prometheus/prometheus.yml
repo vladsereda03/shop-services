@@ -1,0 +1,25 @@
+# Prometheus scrape configuration for the shop microservices.
+# Every Spring Boot service exposes Micrometer metrics in Prometheus text
+# format at /actuator/prometheus (anonymous access is explicitly permitted
+# in each SecurityConfig). Prometheus pulls ("scrapes") each target every
+# scrape_interval and stores the samples in its embedded time-series DB.
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: shop-services
+    metrics_path: /actuator/prometheus
+    static_configs:
+      # the `application` label lets Grafana dashboards filter/group by service
+      - targets: ["auth:9000"]
+        labels: { application: auth }
+      - targets: ["client:8080"]
+        labels: { application: client }
+      - targets: ["product:8082"]
+        labels: { application: product }
+      - targets: ["cart:8083"]
+        labels: { application: cart }
+      - targets: ["order:8084"]
+        labels: { application: order }
+      - targets: ["payment:8085"]
+        labels: { application: payment }

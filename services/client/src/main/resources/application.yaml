@@ -47,3 +47,15 @@ logging:
     org.hibernate.SQL: DEBUG
     org.springframework.security: DEBUG
     org.springframework.web.reactive.function.client: TRACE
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # only what we consume: health for container probes, prometheus for scraping
+        include: health, prometheus
+  endpoint:
+    health:
+      probes:
+        # adds /actuator/health/liveness and /actuator/health/readiness
+        enabled: true

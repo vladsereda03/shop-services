@@ -41,8 +41,8 @@ services:
       broker-2: { condition: service_started }
       broker-3: { condition: service_started }
     healthcheck:
-      # plain TCP probe: Tomcat opens the port only after the context is up
-      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/9000"]
+      # HTTP GET via bash /dev/tcp — the JRE image has no curl/wget
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/9000 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"status\":\"UP\"' <&3"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -63,6 +63,12 @@ services:
     depends_on:
       # client resolves the OIDC configuration from auth at startup
       auth: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"status\":\"UP\"' <&3"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
 
   product:
     build:
@@ -78,6 +84,12 @@ services:
         aliases: [product.local]
     depends_on:
       postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8082 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"status\":\"UP\"' <&3"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
 
   cart:
     build:
@@ -98,6 +110,12 @@ services:
       broker-1: { condition: service_started }
       broker-2: { condition: service_started }
       broker-3: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8083 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"status\":\"UP\"' <&3"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
 
   order:
     build:
@@ -110,6 +128,12 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/orders
     depends_on:
       postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8084 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"status\":\"UP\"' <&3"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
 
   payment:
     build:
@@ -130,6 +154,12 @@ services:
       - "8085:8085"
     depends_on:
       postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8085 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"status\":\"UP\"' <&3"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
   postgres:
     image: postgres:16-alpine
     container_name: shop-postgres
@@ -148,5 +178,35 @@ services:
       timeout: 3s
       retries: 10
 
+  # --- observability ---
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    container_name: shop-prometheus
+    volumes:
+      - ./infra/docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # keep collected metrics across restarts
+      - shop_prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    container_name: shop-grafana
+    environment:
+      # demo credentials; override via .env if the stack is ever exposed
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./infra/docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      # keep manually created dashboards across restarts
+      - shop_grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
 volumes:
   shop_pg16_data:
+  shop_prometheus_data:
+  shop_grafana_data:
