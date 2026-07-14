@@ -1,0 +1,9 @@
+# keep the Docker build context minimal: Maven build needs only poms and sources
+**/target
+.git
+.github
+.idea
+*.iml
+*.md
+infra
+scripts

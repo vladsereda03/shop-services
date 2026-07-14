@@ -151,7 +151,7 @@
 <div class="container">
     <div class="item" th:each="good : ${goods}">
         <a th:href="@{/goods/{id}(id=${good.getId()})}">
-            <img th:src= "*{'data:image/jpg;base64,' + good.getImageBase64()}" height="350px" width="350px" alt="Product Image">
+            <img th:src="|data:image/jpg;base64,${good.imageBase64}|" height="350px" width="350px" alt="Product Image">
             <div class="item-title" th:text="${good.getName()}"></div>
             <div class="item-price" th:text="'Ціна, грн.: ' + ${good.getPriceGrn()}"></div>
         </a>

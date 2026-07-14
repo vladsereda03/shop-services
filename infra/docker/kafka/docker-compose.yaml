@@ -1,6 +1,6 @@
 services:
   controller-1:
-    image: apache/kafka:latest
+    image: apache/kafka:4.0.0
     container_name: controller-1
     ports:
       - "9093:9093"
@@ -25,7 +25,7 @@ services:
       - kafka-net
 
   controller-2:
-    image: apache/kafka:latest
+    image: apache/kafka:4.0.0
     container_name: controller-2
     ports:
       - "9193:9093"
@@ -50,7 +50,7 @@ services:
       - kafka-net
 
   controller-3:
-    image: apache/kafka:latest
+    image: apache/kafka:4.0.0
     container_name: controller-3
     ports:
       - "9293:9093"
@@ -75,7 +75,7 @@ services:
       - kafka-net
 
   broker-1:
-    image: apache/kafka:latest
+    image: apache/kafka:4.0.0
     container_name: broker-1
     ports:
       - 29092:9092
@@ -108,7 +108,7 @@ services:
       - kafka-net
 
   broker-2:
-    image: apache/kafka:latest
+    image: apache/kafka:4.0.0
     container_name: broker-2
     ports:
       - 39092:9092
@@ -141,7 +141,7 @@ services:
       - kafka-net
 
   broker-3:
-    image: apache/kafka:latest
+    image: apache/kafka:4.0.0
     container_name: broker-3
     ports:
       - 49092:9092

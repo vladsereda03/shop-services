@@ -40,3 +40,6 @@ build/
 
 /infra/docker/kafka/*
 !/infra/docker/kafka/docker-compose.yaml
+
+# local compose secrets
+.env

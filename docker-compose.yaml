@@ -1,0 +1,152 @@
+name: shop
+
+# Reuse the existing Kafka cluster definition (3 controllers + 3 brokers, KRaft).
+# Brokers advertise two listeners: broker-N:19092 inside the compose network,
+# localhost:29092/39092/49092 for processes on the host.
+include:
+  - infra/docker/kafka/docker-compose.yaml
+
+# shared fragments
+x-db-credentials: &db-credentials
+  SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-shop}
+  SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-shop}
+
+services:
+  auth:
+    build:
+      context: .
+      args: { MODULE: auth }
+    image: shop/auth
+    container_name: shop-auth
+    environment:
+      <<: *db-credentials
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/authDB
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: broker-1:19092,broker-2:19092,broker-3:19092
+      # RSA pair for JWT signing, single-line Base64 DER (see .env.example)
+      JWK_KEY_ID: ${JWK_KEY_ID:?see .env.example}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?see .env.example}
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?see .env.example}
+    ports:
+      # the browser talks to auth directly (login form, OIDC redirects):
+      # auth.local must resolve to 127.0.0.1 on the host (hosts file)
+      - "9000:9000"
+    networks:
+      default:
+        # containers resolve the OIDC issuer http://auth.local:9000 to this container
+        aliases: [auth.local]
+      kafka-net: {}
+    depends_on:
+      postgres: { condition: service_healthy }
+      broker-1: { condition: service_started }
+      broker-2: { condition: service_started }
+      broker-3: { condition: service_started }
+    healthcheck:
+      # plain TCP probe: Tomcat opens the port only after the context is up
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/9000"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+
+  client:
+    build:
+      context: .
+      args: { MODULE: client }
+    image: shop/client
+    container_name: shop-client
+    environment:
+      # these two are localhost in application.yaml (host mode) — point them at containers
+      SERVICES_ORDER_BASE_URL: http://order:8084
+      SERVICES_PAYMENT_BASE_URL: http://payment:8085
+    ports:
+      - "8080:8080"
+    depends_on:
+      # client resolves the OIDC configuration from auth at startup
+      auth: { condition: service_healthy }
+
+  product:
+    build:
+      context: .
+      args: { MODULE: product }
+    image: shop/product
+    container_name: shop-product
+    environment:
+      <<: *db-credentials
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/products
+    networks:
+      default:
+        aliases: [product.local]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  cart:
+    build:
+      context: .
+      args: { MODULE: cart }
+    image: shop/cart
+    container_name: shop-cart
+    environment:
+      <<: *db-credentials
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/carts
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: broker-1:19092,broker-2:19092,broker-3:19092
+    networks:
+      default:
+        aliases: [cart.local]
+      kafka-net: {}
+    depends_on:
+      postgres: { condition: service_healthy }
+      broker-1: { condition: service_started }
+      broker-2: { condition: service_started }
+      broker-3: { condition: service_started }
+
+  order:
+    build:
+      context: .
+      args: { MODULE: order }
+    image: shop/order
+    container_name: shop-order
+    environment:
+      <<: *db-credentials
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/orders
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  payment:
+    build:
+      context: .
+      args: { MODULE: payment }
+    image: shop/payment
+    container_name: shop-payment
+    environment:
+      <<: *db-credentials
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/payments
+      # localhost in application.yaml (host mode) — point it at the order container
+      SERVICES_ORDER_BASE_URL: http://order:8084
+      # keep the signing key in sync with scripts/emulate-liqpay-callback.ps1 on the host
+      LIQPAY_PUBLIC_KEY: ${LIQPAY_PUBLIC_KEY:-sandbox_public_key}
+      LIQPAY_PRIVATE_KEY: ${LIQPAY_PRIVATE_KEY:-sandbox_private_key}
+    ports:
+      # the LiqPay callback emulator script posts from the host
+      - "8085:8085"
+    depends_on:
+      postgres: { condition: service_healthy }
+  postgres:
+    image: postgres:16-alpine
+    container_name: shop-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-shop}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-shop}
+    ports:
+      # 5433 on the host to avoid clashing with a locally installed PostgreSQL
+      - "5433:5432"
+    volumes:
+      - ./infra/docker/postgres/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
+      - shop_pg16_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  shop_pg16_data:

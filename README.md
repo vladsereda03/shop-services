@@ -120,6 +120,37 @@ Open **http://localhost:8080**, register a user and log in.
   ```
   (re-login after granting).
 
+## Run with Docker Compose
+
+The whole stack (PostgreSQL, a 3-broker Kafka cluster and all six services) can
+run in containers — no local Java, Maven or PostgreSQL needed:
+
+```
+cp .env.example .env    # fill in the JWT key pair (openssl commands inside)
+docker compose up -d --build --wait
+```
+
+Then open **http://localhost:8080** (the `auth.local` hosts entry from
+[Hosts entries](#1-hosts-entries) is still required — the browser is redirected
+to `http://auth.local:9000` to log in; inside the compose network the same name
+resolves to the auth container via a network alias, so issuer validation works
+on both sides).
+
+Notes:
+
+- Services are configured with environment variables layered over
+  `application.yaml` (see `docker-compose.yaml`); the images are built by the
+  parameterized multi-stage `Dockerfile` in the repository root.
+- The LiqPay callback emulator works against the containerized stack as well:
+  payment is published on `localhost:8085`.
+- To grant the admin role inside the container database:
+  `docker exec shop-postgres psql -U shop -d authDB -c "INSERT INTO user_roles ..."`.
+- The full stack and the standalone Kafka cluster
+  (`infra/docker/kafka/docker-compose.yaml`, used for host-mode development)
+  define the same containers — run one or the other, not both.
+- Stop everything with `docker compose down` (add `-v` to also drop the
+  database volume and start fresh next time).
+
 ## Tests
 
 ```
