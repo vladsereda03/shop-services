@@ -26,6 +26,8 @@ services:
       JWK_KEY_ID: ${JWK_KEY_ID:?see .env.example}
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?see .env.example}
       JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?see .env.example}
+      # ship spans to the zipkin container (the yaml default is localhost:9411, host mode)
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
     ports:
       # the browser talks to auth directly (login form, OIDC redirects):
       # auth.local must resolve to 127.0.0.1 on the host (hosts file)
@@ -58,6 +60,7 @@ services:
       # these two are localhost in application.yaml (host mode) — point them at containers
       SERVICES_ORDER_BASE_URL: http://order:8084
       SERVICES_PAYMENT_BASE_URL: http://payment:8085
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
     ports:
       - "8080:8080"
     depends_on:
@@ -79,6 +82,7 @@ services:
     environment:
       <<: *db-credentials
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/products
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
     networks:
       default:
         aliases: [product.local]
@@ -101,6 +105,7 @@ services:
       <<: *db-credentials
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/carts
       SPRING_KAFKA_BOOTSTRAP_SERVERS: broker-1:19092,broker-2:19092,broker-3:19092
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
     networks:
       default:
         aliases: [cart.local]
@@ -126,6 +131,7 @@ services:
     environment:
       <<: *db-credentials
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/orders
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
     depends_on:
       postgres: { condition: service_healthy }
     healthcheck:
@@ -149,6 +155,7 @@ services:
       # keep the signing key in sync with scripts/emulate-liqpay-callback.ps1 on the host
       LIQPAY_PUBLIC_KEY: ${LIQPAY_PUBLIC_KEY:-sandbox_public_key}
       LIQPAY_PRIVATE_KEY: ${LIQPAY_PRIVATE_KEY:-sandbox_private_key}
+      MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
     ports:
       # the LiqPay callback emulator script posts from the host
       - "8085:8085"
@@ -189,6 +196,14 @@ services:
       - shop_prometheus_data:/prometheus
     ports:
       - "9090:9090"
+
+  zipkin:
+    image: openzipkin/zipkin:3.6.1
+    container_name: shop-zipkin
+    # spans live in memory (default STORAGE_TYPE=mem) — enough for a demo,
+    # traces are lost on container restart; services degrade gracefully if it is down
+    ports:
+      - "9411:9411"
 
   grafana:
     image: grafana/grafana:12.1.0

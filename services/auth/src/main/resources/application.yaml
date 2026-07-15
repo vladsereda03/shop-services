@@ -14,7 +14,8 @@ jwt:
 spring:
 
   application:
-    name: Auth service
+    # short lowercase name: it becomes the service name in Zipkin traces
+    name: auth
 
   datasource:
     driver-class-name: org.postgresql.Driver
@@ -48,6 +49,9 @@ spring:
         enable.idempotence: true
         max.in.flight.requests.per.connection: 5
       acks: all
+    template:
+      # write the current trace context into outgoing record headers (auth -> cart)
+      observation-enabled: true
 
 
 
@@ -68,3 +72,7 @@ management:
       probes:
         # adds /actuator/health/liveness and /actuator/health/readiness
         enabled: true
+  tracing:
+    sampling:
+      # export every trace — demo setting; production typically samples 1-10%
+      probability: 1.0

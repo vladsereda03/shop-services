@@ -6,6 +6,9 @@ services:
     base-url: http://product.local:8082
 
 spring:
+  application:
+    # short lowercase name: it becomes the service name in Zipkin traces
+    name: cart
   datasource:
     url: jdbc:postgresql://localhost:5432/carts
     username: ${SPRING_DATASOURCE_USERNAME}
@@ -28,6 +31,9 @@ spring:
       properties:
         spring.json.trusted.packages: shop.event
       auto-offset-reset: earliest
+    listener:
+      # continue the trace carried in record headers instead of starting a new one
+      observation-enabled: true
 
   security:
     oauth2:
@@ -58,3 +64,7 @@ management:
       probes:
         # adds /actuator/health/liveness and /actuator/health/readiness
         enabled: true
+  tracing:
+    sampling:
+      # export every trace — demo setting; production typically samples 1-10%
+      probability: 1.0

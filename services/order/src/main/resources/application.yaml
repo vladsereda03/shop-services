@@ -6,6 +6,9 @@ services:
     base-url: http://cart.local:8083
 
 spring:
+  application:
+    # short lowercase name: it becomes the service name in Zipkin traces
+    name: order
   datasource:
     url: jdbc:postgresql://localhost:5432/orders
     username: ${SPRING_DATASOURCE_USERNAME}
@@ -48,3 +51,7 @@ management:
       probes:
         # adds /actuator/health/liveness and /actuator/health/readiness
         enabled: true
+  tracing:
+    sampling:
+      # export every trace — demo setting; production typically samples 1-10%
+      probability: 1.0

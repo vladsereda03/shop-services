@@ -17,6 +17,9 @@ services:
     base-url: http://localhost:8085
 
 spring:
+  application:
+    # short lowercase name: it becomes the service name in Zipkin traces
+    name: client
   security:
     oauth2:
       client:
@@ -59,3 +62,7 @@ management:
       probes:
         # adds /actuator/health/liveness and /actuator/health/readiness
         enabled: true
+  tracing:
+    sampling:
+      # export every trace — demo setting; production typically samples 1-10%
+      probability: 1.0

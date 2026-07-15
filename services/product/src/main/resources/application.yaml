@@ -2,6 +2,9 @@ server:
   port: 8082
 
 spring:
+  application:
+    # short lowercase name: it becomes the service name in Zipkin traces
+    name: product
   datasource:
     url: jdbc:postgresql://localhost:5432/products
     username: ${SPRING_DATASOURCE_USERNAME}
@@ -33,3 +36,7 @@ management:
       probes:
         # adds /actuator/health/liveness and /actuator/health/readiness
         enabled: true
+  tracing:
+    sampling:
+      # export every trace — demo setting; production typically samples 1-10%
+      probability: 1.0

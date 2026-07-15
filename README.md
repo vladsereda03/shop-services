@@ -7,8 +7,8 @@ pay via [LiqPay](https://www.liqpay.ua/) and set up recurring subscriptions;
 administrators manage the catalog.
 
 **Stack:** Java 21 · Spring Boot 3.5 · Spring Security / Spring Authorization Server
-(OAuth2 + OIDC) · Spring Data JPA · PostgreSQL · Apache Kafka · Thymeleaf · Maven
-(multi-module monorepo).
+(OAuth2 + OIDC) · Spring Data JPA · PostgreSQL · Apache Kafka · Thymeleaf ·
+Prometheus + Grafana + Zipkin (observability) · Maven (multi-module monorepo).
 
 ## Architecture
 
@@ -122,8 +122,9 @@ Open **http://localhost:8080**, register a user and log in.
 
 ## Run with Docker Compose
 
-The whole stack (PostgreSQL, a 3-broker Kafka cluster and all six services) can
-run in containers — no local Java, Maven or PostgreSQL needed:
+The whole stack (PostgreSQL, a 3-broker Kafka cluster, all six services and the
+Prometheus / Grafana / Zipkin observability trio) can run in containers — no
+local Java, Maven or PostgreSQL needed:
 
 ```
 cp .env.example .env    # fill in the JWT key pair (openssl commands inside)
@@ -150,6 +151,32 @@ Notes:
   define the same containers — run one or the other, not both.
 - Stop everything with `docker compose down` (add `-v` to also drop the
   database volume and start fresh next time).
+
+## Observability
+
+Every service exposes health probes and metrics via Spring Boot Actuator +
+Micrometer: `/actuator/health` (used by the compose healthchecks) and
+`/actuator/prometheus` are open anonymously, the rest of the management
+surface stays closed. The compose stack ships the monitoring/tracing trio:
+
+| Tool | URL | Purpose |
+|---|---|---|
+| Prometheus | http://localhost:9090 | scrapes `/actuator/prometheus` of all six services every 15s (`infra/docker/prometheus/prometheus.yml`); targets carry an `application` label |
+| Grafana | http://localhost:3000 (`admin`/`admin`) | Prometheus datasource provisioned from `infra/docker/grafana/provisioning`; import dashboard `4701` (JVM Micrometer) and switch services via the `application` variable |
+| Zipkin | http://localhost:9411 | distributed trace storage and UI |
+
+Distributed tracing uses Micrometer Tracing with the Brave bridge: spans cover
+incoming HTTP, outgoing `RestClient` calls and the Kafka leg (auth → cart);
+the W3C `traceparent` header propagates the trace across service boundaries,
+and spans are reported to Zipkin (100% sampling — a demo setting; production
+would sample a few percent). A checkout shows up as a single
+client → order → cart → product waterfall. Logs carry a
+`[service,traceId,spanId]` prefix, so a trace found in Zipkin can be grepped
+across `docker logs` of any service.
+
+In host mode the metrics endpoints work as-is and spans are sent to
+`http://localhost:9411` — start the Zipkin container if traces are wanted; a
+missing Zipkin is harmless (spans are dropped with a warning).
 
 ## Tests
 
@@ -202,14 +229,15 @@ default: daily/weekly/monthly/yearly at 15:00).
   compensation / a transactional outbox are future work.
 - Dev secrets (client secrets, DB passwords) are plain-text in configs — fine for
   a local demo, not for production.
-- Planned next: Dockerfiles + full `docker-compose` for all services and
-  databases, Kubernetes manifests, an API gateway.
+- Planned next: Kubernetes manifests, an API gateway.
 
 ## Repository layout
 
 ```
-libs/contracts/       shared event contracts
-services/<name>/      one Spring Boot app per service
-infra/docker/kafka/   Kafka cluster for local development
-scripts/              development utilities (LiqPay callback emulator)
+libs/contracts/           shared event contracts
+services/<name>/          one Spring Boot app per service
+infra/docker/kafka/       Kafka cluster for local development
+infra/docker/prometheus/  Prometheus scrape configuration
+infra/docker/grafana/     Grafana provisioning (datasource)
+scripts/                  development utilities (LiqPay callback emulator)
 ```

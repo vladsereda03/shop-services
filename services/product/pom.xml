@@ -43,6 +43,17 @@
             <scope>runtime</scope>
         </dependency>
         <dependency>
+            <!-- bridges Micrometer Observation to Brave: creates spans, propagates trace context -->
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-brave</artifactId>
+        </dependency>
+        <dependency>
+            <!-- ships finished spans to the Zipkin server over HTTP -->
+            <groupId>io.zipkin.reporter2</groupId>
+            <artifactId>zipkin-reporter-brave</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
