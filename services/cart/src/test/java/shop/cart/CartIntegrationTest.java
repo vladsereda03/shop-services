@@ -1,10 +1,12 @@
 package shop.cart;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -13,6 +15,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import java.time.Duration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,14 +32,18 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.web.client.ExpectedCount;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.server.ResponseStatusException;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.KafkaContainer;
+import shop.cart.client.ProductClient;
 import shop.cart.model.Cart;
+import shop.cart.model.dto.ProductDTO;
 import shop.cart.repository.CartRepository;
 import shop.event.UserRegisteredEvent;
 
@@ -68,6 +76,10 @@ class CartIntegrationTest {
   @Autowired private KafkaTemplate<Object, Object> kafkaTemplate;
 
   @Autowired private MockRestServiceServer productServer;
+
+  @Autowired private ProductClient productClient;
+
+  @Autowired private CircuitBreakerRegistry circuitBreakerRegistry;
 
   @BeforeEach
   void cleanUp() {
@@ -184,6 +196,64 @@ class CartIntegrationTest {
 
     productServer.verify();
     assertThat(cartRepository.findByUserId(USER_ID).orElseThrow().getItems()).isEmpty();
+  }
+
+  // --- resilience on the product leg ---
+
+  @Test
+  void retryRecoversGetProductFromTransientFailures() {
+    circuitBreakerRegistry.circuitBreaker("product").reset();
+    productServer
+        .expect(ExpectedCount.times(2), requestTo(PRODUCT_BASE_URL + "/api/products/5"))
+        .andExpect(method(HttpMethod.GET))
+        .andRespond(withServerError());
+    productServer
+        .expect(requestTo(PRODUCT_BASE_URL + "/api/products/5"))
+        .andExpect(method(HttpMethod.GET))
+        .andRespond(
+            withSuccess(
+                "{\"id\":5,\"name\":\"Конструктор\",\"priceKopeck\":1500,\"quantity\":10}",
+                MediaType.APPLICATION_JSON));
+
+    // two 5xx answers are retried away; the third attempt succeeds transparently
+    ProductDTO product = productClient.getProduct(5L);
+
+    assertThat(product.getPriceKopeck()).isEqualTo(1500L);
+    productServer.verify();
+  }
+
+  @Test
+  void openCircuitBreakerFailsFastWith503() {
+    CircuitBreaker breaker = circuitBreakerRegistry.circuitBreaker("product");
+    breaker.reset();
+    try {
+      productServer
+          .expect(ExpectedCount.manyTimes(), requestTo(PRODUCT_BASE_URL + "/api/products/5"))
+          .andExpect(method(HttpMethod.GET))
+          .andRespond(withServerError());
+
+      // every retry attempt is recorded by the breaker, so a few failing calls
+      // cross minimum-number-of-calls=5 at a 100% failure rate and open it
+      for (int i = 0; i < 3; i++) {
+        try {
+          productClient.getProduct(5L);
+        } catch (Exception expectedUntilOpen) {
+          // 5xx while closed, then the 503 fallback once the breaker opens
+        }
+      }
+      assertThat(breaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
+
+      // fail-fast: rejected by the breaker before any HTTP, mapped to 503 by the fallback
+      assertThatThrownBy(() -> productClient.getProduct(5L))
+          .isInstanceOf(ResponseStatusException.class)
+          .satisfies(
+              e ->
+                  assertThat(((ResponseStatusException) e).getStatusCode())
+                      .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));
+    } finally {
+      // the context is shared with the other tests: leave the breaker closed
+      breaker.reset();
+    }
   }
 
   // --- security rules ---

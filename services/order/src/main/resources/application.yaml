@@ -9,6 +9,13 @@ spring:
   application:
     # short lowercase name: it becomes the service name in Zipkin traces
     name: order
+  http:
+    client:
+      # a hung neighbour must become an error, not an eternal wait — without
+      # timeouts the circuit breaker never sees the failure (applies to the
+      # auto-configured factory behind the injected RestClient.Builder)
+      connect-timeout: 2s
+      read-timeout: 5s
   datasource:
     url: jdbc:postgresql://localhost:5432/orders
     username: ${SPRING_DATASOURCE_USERNAME}
@@ -55,3 +62,27 @@ management:
     sampling:
       # export every trace — demo setting; production typically samples 1-10%
       probability: 1.0
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      # applies to every breaker in this service (the cart leg);
+      # the parameters are explained in cart-service's application.yaml
+      default:
+        sliding-window-type: count_based
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        ignore-exceptions:
+          - org.springframework.web.client.HttpClientErrorException
+  retry:
+    configs:
+      # only read-only calls carry @Retry
+      default:
+        max-attempts: 3
+        wait-duration: 200ms
+        retry-exceptions:
+          - org.springframework.web.client.HttpServerErrorException
+          - org.springframework.web.client.ResourceAccessException

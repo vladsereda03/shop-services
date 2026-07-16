@@ -20,6 +20,13 @@ spring:
   application:
     # short lowercase name: it becomes the service name in Zipkin traces
     name: client
+  http:
+    client:
+      # a hung neighbour must become an error, not an eternal wait — without
+      # timeouts the circuit breaker never sees the failure (applies to the
+      # auto-configured factory behind the injected RestClient.Builder)
+      connect-timeout: 2s
+      read-timeout: 5s
   security:
     oauth2:
       client:

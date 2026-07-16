@@ -38,6 +38,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import shop.payment.model.Subscription;
+import shop.payment.repository.ProcessedCallbackRepository;
 import shop.payment.repository.SubscriptionRepository;
 
 // full-context integration test: real PostgreSQL in a container, cart/order calls stubbed.
@@ -77,12 +78,15 @@ class PaymentIntegrationTest {
 
   @Autowired private SubscriptionRepository subscriptionRepository;
 
+  @Autowired private ProcessedCallbackRepository processedCallbackRepository;
+
   @Autowired private MockRestServiceServer shopServer;
 
   @BeforeEach
   void cleanUp() {
     shopServer.reset();
     subscriptionRepository.deleteAll();
+    processedCallbackRepository.deleteAll();
   }
 
   // --- subscriptions ---
@@ -215,6 +219,58 @@ class PaymentIntegrationTest {
 
     mockMvc
         .perform(post("/payment/new").param("data", data).param("signature", sign(data)))
+        .andExpect(status().isOk());
+
+    shopServer.verify();
+  }
+
+  @Test
+  void duplicatePaymentCallbackCreatesOnlyOneOrder() throws Exception {
+    // exactly one checkout expectation: a second call would fail the mock server
+    shopServer
+        .expect(requestTo(ORDER_BASE_URL + "/internal/orders/" + USER_ID + "/checkout"))
+        .andExpect(method(HttpMethod.POST))
+        .andRespond(withSuccess());
+    String data =
+        encode(
+            new JSONObject()
+                .put("status", "success")
+                .put("order_id", "uuid-dup")
+                .put("info", "42")
+                .put("payment_id", 900_000_001L));
+
+    mockMvc
+        .perform(post("/payment/new").param("data", data).param("signature", sign(data)))
+        .andExpect(status().isOk());
+    // the replay is absorbed by the processed-callback guard and still answered 200
+    mockMvc
+        .perform(post("/payment/new").param("data", data).param("signature", sign(data)))
+        .andExpect(status().isOk());
+
+    shopServer.verify();
+  }
+
+  @Test
+  void duplicateSubscriptionCallbackCreatesOnlyOneOrder() throws Exception {
+    Subscription subscription =
+        subscriptionRepository.saveAndFlush(
+            subscriptionOf("month", LocalDateTime.now().minusDays(1)));
+    shopServer
+        .expect(requestTo(ORDER_BASE_URL + "/internal/orders/" + USER_ID))
+        .andExpect(method(HttpMethod.POST))
+        .andRespond(withSuccess());
+    String data =
+        encode(
+            new JSONObject()
+                .put("status", "success")
+                .put("order_id", String.valueOf(subscription.getId()))
+                .put("payment_id", 900_000_002L));
+
+    mockMvc
+        .perform(post("/subscription/payment").param("data", data).param("signature", sign(data)))
+        .andExpect(status().isOk());
+    mockMvc
+        .perform(post("/subscription/payment").param("data", data).param("signature", sign(data)))
         .andExpect(status().isOk());
 
     shopServer.verify();

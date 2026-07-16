@@ -8,12 +8,11 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
+import shop.order.client.CartClient;
 import shop.order.model.Order;
 import shop.order.model.dto.CartDTO;
 import shop.order.model.dto.CartItemDTO;
@@ -26,19 +25,11 @@ public class OrderService {
   private static final Logger logger = LoggerFactory.getLogger(OrderService.class);
 
   private final OrderRepository orderRepository;
-  private final RestClient restClient;
-
-  @Value("${services.cart.base-url}")
-  private String cartBaseUrl;
+  private final CartClient cartClient;
 
   @Transactional
   public Order checkout(Long userId) {
-    CartDTO cart =
-        restClient
-            .get()
-            .uri(cartBaseUrl + "/internal/carts/{userId}", userId)
-            .retrieve()
-            .body(CartDTO.class);
+    CartDTO cart = cartClient.getCart(userId);
 
     if (cart == null || cart.getItems() == null || cart.getItems().isEmpty()) {
       throw new ResponseStatusException(
@@ -56,11 +47,7 @@ public class OrderService {
 
     // clearing goes last: if it fails, the transaction rolls the new order back
     // (checkout-clear keeps the stock reserved — the goods are sold, not returned)
-    restClient
-        .post()
-        .uri(cartBaseUrl + "/internal/carts/{userId}/checkout-clear", userId)
-        .retrieve()
-        .toBodilessEntity();
+    cartClient.clearAfterCheckout(userId);
 
     return order;
   }

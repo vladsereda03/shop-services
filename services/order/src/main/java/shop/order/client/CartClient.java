@@ -1,0 +1,61 @@
+package shop.order.client;
+
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.server.ResponseStatusException;
+import shop.order.model.dto.CartDTO;
+
+// the HTTP edge to cart-service in its own bean: resilience annotations are AOP
+// proxies and would be silently bypassed on self-invocation inside OrderService
+@Component
+@RequiredArgsConstructor
+public class CartClient {
+
+  private final RestClient restClient;
+
+  @Value("${services.cart.base-url}")
+  private String cartBaseUrl;
+
+  // GET is idempotent — safe to retry on transient failures
+  @CircuitBreaker(name = "cart", fallbackMethod = "getCartUnavailable")
+  @Retry(name = "cart")
+  public CartDTO getCart(Long userId) {
+    return restClient
+        .get()
+        .uri(cartBaseUrl + "/internal/carts/{userId}", userId)
+        .retrieve()
+        .body(CartDTO.class);
+  }
+
+  // deliberately NO @Retry: retries stay on read-only calls, and a failed clear
+  // must roll the checkout transaction back immediately, not after N attempts
+  @CircuitBreaker(name = "cart", fallbackMethod = "clearUnavailable")
+  public void clearAfterCheckout(Long userId) {
+    restClient
+        .post()
+        .uri(cartBaseUrl + "/internal/carts/{userId}/checkout-clear", userId)
+        .retrieve()
+        .toBodilessEntity();
+  }
+
+  // fallbacks are scoped to the OPEN breaker (CallNotPermittedException):
+  // real upstream errors keep their semantics for the caller
+  private CartDTO getCartUnavailable(Long userId, CallNotPermittedException e) {
+    throw cartUnavailable();
+  }
+
+  private void clearUnavailable(Long userId, CallNotPermittedException e) {
+    throw cartUnavailable();
+  }
+
+  private ResponseStatusException cartUnavailable() {
+    return new ResponseStatusException(
+        HttpStatus.SERVICE_UNAVAILABLE, "Cart service is temporarily unavailable");
+  }
+}

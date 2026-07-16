@@ -59,6 +59,16 @@
             <scope>runtime</scope>
         </dependency>
         <dependency>
+            <!-- circuit breaker / retry on the product-service leg (config in application.yaml) -->
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
+        </dependency>
+        <dependency>
+            <!-- the resilience annotations are implemented as AOP aspects -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>

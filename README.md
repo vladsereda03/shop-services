@@ -12,6 +12,47 @@ Prometheus + Grafana + Zipkin (observability) · Maven (multi-module monorepo).
 
 ## Architecture
 
+```mermaid
+flowchart TB
+    browser(["Browser"])
+    liqpay(["LiqPay (external PSP)"])
+
+    subgraph shop["shop services"]
+        client["client :8080<br/>web UI / BFF"]
+        auth["auth :9000<br/>OIDC provider"]
+        product["product :8082<br/>catalog"]
+        cart["cart :8083<br/>cart"]
+        order["order :8084<br/>orders"]
+        payment["payment :8085<br/>payments"]
+        kafka[["Kafka"]]
+    end
+
+    browser -->|"session cookie"| client
+    browser -->|"OIDC login redirects"| auth
+    client -->|"user JWT"| product
+    client -->|"user JWT"| cart
+    client -->|"user JWT"| order
+    client -->|"user JWT"| payment
+    order -->|"client_credentials"| cart
+    cart -->|"client_credentials"| product
+    payment -->|"client_credentials"| order
+    payment -->|"client_credentials"| cart
+    auth -->|"user-registered event"| kafka
+    kafka -->|"provision cart"| cart
+    browser -.->|"hosted payment form"| liqpay
+    liqpay -.->|"signed callback"| payment
+
+    subgraph obs["observability"]
+        prometheus["Prometheus :9090"]
+        grafana["Grafana :3000"]
+        zipkin["Zipkin :9411"]
+    end
+
+    grafana -->|"queries"| prometheus
+    prometheus -.->|"scrapes /actuator/prometheus"| shop
+    shop -.->|"spans"| zipkin
+```
+
 | Module | Port | Database | Responsibility |
 |---|---|---|---|
 | `services/auth` | 9000 | `authDB` | Authorization server (Spring Authorization Server): user registration, form login, OIDC provider, JWT issuing; publishes `user-registered` events to Kafka |
@@ -45,6 +86,63 @@ Prometheus + Grafana + Zipkin (observability) · Maven (multi-module monorepo).
 - **Subscription:** client → payment `POST /subscriptions/my` → payment snapshots
   the cart, stores the subscription, (optionally) registers it in LiqPay and clears
   the cart; recurring charges create orders from the snapshot.
+
+## Engineering highlights
+
+Design decisions and production-style bugs found and fixed along the way:
+
+1. **Hand-built OAuth2/OIDC circuit** on Spring Authorization Server — no
+   Keycloak/Auth0. The UI follows the BFF pattern (`client` is the only
+   browser-facing OAuth2 client; tokens never reach the browser), services call
+   each other with dedicated `client_credentials` registrations and fine-grained
+   scopes (see [Security model](#security-model)).
+2. **Token refresh vs RP-initiated logout.** The auth server accepts only the
+   *latest* ID token as `id_token_hint`, so after the first background token
+   refresh, logout silently stopped working. Fixed with an event chain that
+   re-injects the refreshed `OidcUser` into the live session —
+   [`OidcUserSessionRefreshListener`](services/client/src/main/java/shop/client/config/OidcUserSessionRefreshListener.java).
+3. **Payment callbacks are authenticated by cryptography, not tokens.** LiqPay
+   cannot carry our JWTs, so the endpoint is anonymous and
+   [`PaymentCallbackService`](services/payment/src/main/java/shop/payment/service/PaymentCallbackService.java)
+   verifies the `base64(sha1(private_key + data + private_key))` signature before
+   trusting a byte (mismatch → 403, covered by unit tests). Callbacks are
+   deduplicated by LiqPay's `payment_id`: a guard row is inserted into
+   `processed_callback` *before* the downstream call, so even a concurrent
+   duplicate blocks on the primary key and fails before it can create a second
+   order; replays are answered `200` so the PSP stops retrying.
+4. **No distributed transactions — deliberate operation ordering instead.**
+   Local writes commit first, external calls go last, failures roll the local
+   state back: checkout rolls the order back when the cart cannot be cleared
+   ([`OrderService`](services/order/src/main/java/shop/order/service/OrderService.java)),
+   subscription creation does the same around the cart snapshot
+   ([`SubscriptionService`](services/payment/src/main/java/shop/payment/service/SubscriptionService.java)).
+   The remaining gaps are honestly listed in
+   [Known limitations](#known-limitations--roadmap).
+5. **The silently-torn-traces case.** All outgoing HTTP clients were built with a
+   static `RestClient.builder()`, which quietly bypasses Boot's observability
+   instrumentation: no `traceparent` propagation, so every distributed trace tore
+   at each service boundary. Found while wiring Zipkin; fixed by building from
+   the injected auto-configured builder —
+   [`RestClientConfig`](services/order/src/main/java/shop/order/config/RestClientConfig.java).
+6. **The 100k-character SpEL case.** Any product image over ~75 KB crashed the
+   catalog page with `EL1078E`: Thymeleaf's `+` concatenation is evaluated
+   through SpEL, which caps string literals at 100k characters — base64 images
+   walked right into the limit. Fixed with literal substitution (`|...|`) in
+   [`goods.html`](services/client/src/main/resources/templates/assortment/goods.html).
+7. **Observability paying off within the first hour.** The freshly added health
+   endpoint reported auth as `DOWN`: a leftover `spring-data-redis` dependency
+   had auto-registered a Redis health indicator pointing at a Redis that never
+   existed. Monitoring found a dead dependency that code review had missed.
+8. **Resilience on every inter-service leg.** Outgoing HTTP calls carry
+   connect/read timeouts, Resilience4j circuit breakers and — on idempotent
+   GETs only — retries; non-idempotent stock reservation is never retried, and
+   4xx business answers (409 "insufficient stock") deliberately do not trip the
+   breaker. Extracting the HTTP edges into dedicated client beans
+   ([`ProductClient`](services/cart/src/main/java/shop/cart/client/ProductClient.java)
+   and friends) was forced by a classic pitfall: Spring AOP proxies do not see
+   self-invocation, so resilience annotations on internal methods silently do
+   nothing. Breaker states are exported to Prometheus alongside the other
+   metrics.
 
 ## Getting started
 
@@ -227,6 +325,10 @@ default: daily/weekly/monthly/yearly at 15:00).
 - No distributed transactions between services: operation ordering minimizes the
   damage window (local writes first, external calls last), but sagas with
   compensation / a transactional outbox are future work.
+- Callback deduplication is at-least-once at the edge: the processed
+  `payment_id` row commits together with the downstream order call, so a crash
+  after that call but before the commit would let a PSP retry create a
+  duplicate order — closing this window is the transactional-outbox item above.
 - Dev secrets (client secrets, DB passwords) are plain-text in configs — fine for
   a local demo, not for production.
 - Planned next: Kubernetes manifests, an API gateway.

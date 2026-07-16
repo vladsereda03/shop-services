@@ -21,6 +21,7 @@ import org.json.JSONObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpMethod;
@@ -30,8 +31,11 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
+import shop.payment.client.OrderClient;
 import shop.payment.config.LiqPayProperties;
+import shop.payment.model.ProcessedCallback;
 import shop.payment.model.Subscription;
+import shop.payment.repository.ProcessedCallbackRepository;
 import shop.payment.repository.SubscriptionRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -44,6 +48,8 @@ class PaymentCallbackServiceTest {
 
   @Mock private SubscriptionService subscriptionService;
 
+  @Mock private ProcessedCallbackRepository processedCallbackRepository;
+
   private MockRestServiceServer orderServer;
   private PaymentCallbackService callbackService;
 
@@ -51,13 +57,17 @@ class PaymentCallbackServiceTest {
   void setUp() {
     RestClient.Builder restClientBuilder = RestClient.builder();
     orderServer = MockRestServiceServer.bindTo(restClientBuilder).build();
+    // a bare OrderClient: without Spring AOP its resilience annotations are inert,
+    // so the unit tests exercise pure callback logic
+    OrderClient orderClient = new OrderClient(restClientBuilder.build());
+    ReflectionTestUtils.setField(orderClient, "orderBaseUrl", ORDER_BASE_URL);
     callbackService =
         new PaymentCallbackService(
             new LiqPayProperties("test_public_key", PRIVATE_KEY),
-            restClientBuilder.build(),
+            orderClient,
             subscriptionRepository,
-            subscriptionService);
-    ReflectionTestUtils.setField(callbackService, "orderBaseUrl", ORDER_BASE_URL);
+            subscriptionService,
+            processedCallbackRepository);
   }
 
   // --- one-time payment callback ---
@@ -129,6 +139,48 @@ class PaymentCallbackServiceTest {
 
     assertThatExceptionOfType(HttpServerErrorException.class)
         .isThrownBy(() -> callbackService.processPaymentCallback(data, sign(data)));
+  }
+
+  // --- idempotency by payment_id ---
+
+  @Test
+  void duplicatePaymentIdIsAbsorbedWithoutSecondCheckout() {
+    when(processedCallbackRepository.existsById(555L)).thenReturn(true);
+    String data = encode(paymentPayload("success", 42L).put("payment_id", 555L));
+
+    assertThatCode(() -> callbackService.processPaymentCallback(data, sign(data)))
+        .doesNotThrowAnyException();
+
+    orderServer.verify(); // no checkout expectation was registered — none may happen
+  }
+
+  @Test
+  void firstPaymentIdIsRecordedBeforeCheckout() {
+    orderServer
+        .expect(requestTo(ORDER_BASE_URL + "/internal/orders/42/checkout"))
+        .andExpect(method(HttpMethod.POST))
+        .andRespond(withSuccess());
+    when(processedCallbackRepository.existsById(555L)).thenReturn(false);
+    String data = encode(paymentPayload("success", 42L).put("payment_id", 555L));
+
+    callbackService.processPaymentCallback(data, sign(data));
+
+    ArgumentCaptor<ProcessedCallback> saved = ArgumentCaptor.forClass(ProcessedCallback.class);
+    verify(processedCallbackRepository).saveAndFlush(saved.capture());
+    assertThat(saved.getValue().getPaymentId()).isEqualTo(555L);
+    orderServer.verify();
+  }
+
+  @Test
+  void duplicateSubscriptionPaymentIdDoesNotCreateSecondOrder() {
+    Subscription subscription = Subscription.builder().id(77L).userId(42L).build();
+    when(subscriptionRepository.findById(77L)).thenReturn(Optional.of(subscription));
+    when(processedCallbackRepository.existsById(888L)).thenReturn(true);
+    String data = encode(subscriptionPayload("success", "77").put("payment_id", 888L));
+
+    callbackService.processSubscriptionCallback(data, sign(data));
+
+    verifyNoInteractions(subscriptionService);
   }
 
   // --- recurring subscription callback ---

@@ -13,8 +13,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
+import shop.payment.client.CartClient;
+import shop.payment.client.OrderClient;
 import shop.payment.config.LiqPayProperties;
 import shop.payment.model.Subscription;
 import shop.payment.model.SupportedCurrency;
@@ -37,23 +38,20 @@ public class SubscriptionService {
 
   private final SubscriptionRepository subscriptionRepository;
   private final LiqPayProperties liqPayProperties;
-  private final RestClient restClient;
-  private final String cartBaseUrl;
-  private final String orderBaseUrl;
+  private final CartClient cartClient;
+  private final OrderClient orderClient;
   private final boolean registerInLiqPay;
 
   public SubscriptionService(
       SubscriptionRepository subscriptionRepository,
       LiqPayProperties liqPayProperties,
-      RestClient restClient,
-      @Value("${services.cart.base-url}") String cartBaseUrl,
-      @Value("${services.order.base-url}") String orderBaseUrl,
+      CartClient cartClient,
+      OrderClient orderClient,
       @Value("${payment.subscription.register-in-liqpay}") boolean registerInLiqPay) {
     this.subscriptionRepository = subscriptionRepository;
     this.liqPayProperties = liqPayProperties;
-    this.restClient = restClient;
-    this.cartBaseUrl = cartBaseUrl;
-    this.orderBaseUrl = orderBaseUrl;
+    this.cartClient = cartClient;
+    this.orderClient = orderClient;
     this.registerInLiqPay = registerInLiqPay;
   }
 
@@ -67,12 +65,7 @@ public class SubscriptionService {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Start date and time are required");
     }
 
-    CartDTO cart =
-        restClient
-            .get()
-            .uri(cartBaseUrl + "/internal/carts/{userId}", userId)
-            .retrieve()
-            .body(CartDTO.class);
+    CartDTO cart = cartClient.getCart(userId);
 
     if (cart == null || cart.getItems() == null || cart.getItems().isEmpty()) {
       throw new ResponseStatusException(
@@ -110,11 +103,7 @@ public class SubscriptionService {
 
     // clearing goes last: a failure rolls the subscription back
     // (checkout-clear keeps the stock reserved — the goods are sold, not returned)
-    restClient
-        .post()
-        .uri(cartBaseUrl + "/internal/carts/{userId}/checkout-clear", userId)
-        .retrieve()
-        .toBodilessEntity();
+    cartClient.clearAfterCheckout(userId);
 
     logger.info(
         "Subscription {} created for user {} ({}, {} items)",
@@ -142,12 +131,7 @@ public class SubscriptionService {
                         entry.getValue().getPriceKopeck()))
             .toList();
 
-    restClient
-        .post()
-        .uri(orderBaseUrl + "/internal/orders/{userId}", subscription.getUserId())
-        .body(items)
-        .retrieve()
-        .toBodilessEntity();
+    orderClient.createOrder(subscription.getUserId(), items);
 
     logger.info(
         "Recurring order created from subscription {} for user {}",
