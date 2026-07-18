@@ -16,6 +16,10 @@ spring:
       # auto-configured factory behind the injected RestClient.Builder)
       connect-timeout: 2s
       read-timeout: 5s
+  mvc:
+    problemdetails:
+      # RFC 7807 application/problem+json bodies for MVC-handled errors
+      enabled: true
   datasource:
     url: jdbc:postgresql://localhost:5432/orders
     username: ${SPRING_DATASOURCE_USERNAME}

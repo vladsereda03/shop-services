@@ -5,7 +5,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,9 +29,6 @@ public class SubscriptionService {
 
   private static final Logger logger = LoggerFactory.getLogger(SubscriptionService.class);
 
-  // must match both the form options and the task.cron.* config keys
-  private static final Set<String> PERIODICITIES = Set.of("day", "week", "month", "year");
-
   private static final DateTimeFormatter LIQPAY_DATE_FORMAT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -55,16 +51,10 @@ public class SubscriptionService {
     this.registerInLiqPay = registerInLiqPay;
   }
 
+  // form-shape validation (required fields, periodicity pattern) happens at the MVC
+  // edge via Bean Validation on SubscriptionForm — here only business rules remain
   @Transactional
   public Subscription subscribe(Long userId, SubscriptionForm form) {
-    if (!PERIODICITIES.contains(form.getPeriodicity())) {
-      throw new ResponseStatusException(
-          HttpStatus.BAD_REQUEST, "Periodicity must be one of " + PERIODICITIES);
-    }
-    if (form.getStartDate() == null || form.getStartTime() == null) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Start date and time are required");
-    }
-
     CartDTO cart = cartClient.getCart(userId);
 
     if (cart == null || cart.getItems() == null || cart.getItems().isEmpty()) {

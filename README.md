@@ -143,6 +143,13 @@ Design decisions and production-style bugs found and fixed along the way:
    self-invocation, so resilience annotations on internal methods silently do
    nothing. Breaker states are exported to Prometheus alongside the other
    metrics.
+9. **One error contract across all APIs.** Every API service answers errors in
+   the RFC 7807 `application/problem+json` format (`spring.mvc.problemdetails`
+   plus thin `@RestControllerAdvice` relays that keep upstream problem bodies
+   intact across service boundaries), and request DTOs are validated
+   declaratively with Bean Validation at the MVC edge — an invalid subscription
+   form or catalog entry gets a `400` problem body before any business code or
+   neighbour call runs.
 
 ## Getting started
 

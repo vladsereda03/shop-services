@@ -1,6 +1,7 @@
 package shop.product.controller;
 
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
@@ -44,7 +45,7 @@ public class ProductController {
 
   // catalog management: requires the ADMIN role (see SecurityConfig)
   @PostMapping()
-  public GoodDTO create(@RequestBody CreateGoodRequest request) {
+  public GoodDTO create(@Valid @RequestBody CreateGoodRequest request) {
     return new GoodDTO(productService.createGood(request));
   }
 

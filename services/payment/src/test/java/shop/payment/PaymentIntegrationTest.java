@@ -9,6 +9,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -157,6 +158,28 @@ class PaymentIntegrationTest {
         .perform(get("/subscriptions/my").with(jwt().jwt(jwt -> jwt.claim("uid", USER_ID))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.length()").value(0));
+  }
+
+  @Test
+  void invalidSubscriptionFormIsRejectedWithProblemJson() throws Exception {
+    // violates several constraints at once: blank phone, missing dates,
+    // unknown periodicity, malformed card fields
+    String invalidForm =
+        """
+        {"phone":"","periodicity":"fortnight","cardNumber":"4242","expMonth":13,"cvv":"1"}""";
+
+    mockMvc
+        .perform(
+            post("/subscriptions/my")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(invalidForm)
+                .with(jwt().jwt(jwt -> jwt.claim("uid", USER_ID))))
+        .andExpect(status().isBadRequest())
+        .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.status").value(400));
+
+    shopServer.verify(); // the invalid form never reached the neighbour services
+    assertThat(subscriptionRepository.findAll()).isEmpty();
   }
 
   // --- schedule emulator query ---

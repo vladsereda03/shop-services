@@ -3,6 +3,7 @@ package shop.product;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -142,6 +143,25 @@ class ProductIntegrationTest {
     assertThat(goods.getFirst().getManufacturers())
         .extracting(Manufacturer::getName)
         .containsExactlyInAnyOrder("Lego", "Bela");
+  }
+
+  @Test
+  void invalidCreateGoodRequestIsRejectedWithProblemJson() throws Exception {
+    // blank name, negative price and quantity — stopped by Bean Validation at the
+    // MVC edge, before ProductService or the database are ever reached
+    mockMvc
+        .perform(
+            post("/api/products")
+                .header(HttpHeaders.AUTHORIZATION, ADMIN)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """
+                    {"name":"  ","priceKopeck":-5,"quantity":-1}"""))
+        .andExpect(status().isBadRequest())
+        .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.status").value(400));
+
+    assertThat(goodRepository.findAll()).isEmpty();
   }
 
   @Test

@@ -1,5 +1,6 @@
 package shop.payment.controller;
 
+import jakarta.validation.Valid;
 import java.util.List;
 import lombok.AllArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -25,7 +26,7 @@ public class SubscriptionController {
   // subscribe the current cart: called server-side by the client BFF
   @PostMapping("/my")
   public SubscriptionDTO subscribe(
-      @AuthenticationPrincipal Jwt jwt, @RequestBody SubscriptionForm form) {
+      @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody SubscriptionForm form) {
     return SubscriptionDTO.from(subscriptionService.subscribe(currentUserId(jwt), form));
   }
 

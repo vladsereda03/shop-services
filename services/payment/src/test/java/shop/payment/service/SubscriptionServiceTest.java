@@ -72,35 +72,9 @@ class SubscriptionServiceTest {
 
   // --- subscribe ---
 
-  @Test
-  void unknownPeriodicityIsRejectedWith400() {
-    SubscriptionForm form = validForm();
-    form.setPeriodicity("fortnight");
-
-    assertThatExceptionOfType(ResponseStatusException.class)
-        .isThrownBy(() -> subscriptionService.subscribe(USER_ID, form))
-        .satisfies(e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
-
-    verifyNoInteractions(subscriptionRepository);
-    server.verify();
-  }
-
-  @Test
-  void missingStartDateOrTimeIsRejectedWith400() {
-    SubscriptionForm withoutDate = validForm();
-    withoutDate.setStartDate(null);
-    SubscriptionForm withoutTime = validForm();
-    withoutTime.setStartTime(null);
-
-    for (SubscriptionForm form : new SubscriptionForm[] {withoutDate, withoutTime}) {
-      assertThatExceptionOfType(ResponseStatusException.class)
-          .isThrownBy(() -> subscriptionService.subscribe(USER_ID, form))
-          .satisfies(e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
-    }
-
-    verifyNoInteractions(subscriptionRepository);
-    server.verify();
-  }
+  // form-shape validation (periodicity pattern, required dates) lives on
+  // SubscriptionForm as Bean Validation now and is exercised at the MVC edge
+  // by PaymentIntegrationTest.invalidSubscriptionFormIsRejectedWithProblemJson
 
   @Test
   void emptyCartIsRejectedWith400AndNothingIsSaved() {
