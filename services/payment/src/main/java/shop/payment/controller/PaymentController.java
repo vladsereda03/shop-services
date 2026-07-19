@@ -1,5 +1,6 @@
 package shop.payment.controller;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import lombok.AllArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -31,7 +32,8 @@ public class PaymentController {
   }
 
   // LiqPay server-to-server callback (server_url); open in SecurityConfig, authenticity is the
-  // signature
+  // signature — the empty @SecurityRequirements lifts the global bearer-jwt padlock in OpenAPI
+  @SecurityRequirements
   @PostMapping("/payment/new")
   public void paymentCallback(
       @RequestParam("data") String data, @RequestParam("signature") String signature) {
@@ -39,6 +41,7 @@ public class PaymentController {
   }
 
   // LiqPay callback for recurring subscription charges
+  @SecurityRequirements
   @PostMapping("/subscription/payment")
   public void subscriptionCallback(
       @RequestParam("data") String data, @RequestParam("signature") String signature) {

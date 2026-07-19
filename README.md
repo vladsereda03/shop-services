@@ -8,7 +8,8 @@ administrators manage the catalog.
 
 **Stack:** Java 21 · Spring Boot 3.5 · Spring Security / Spring Authorization Server
 (OAuth2 + OIDC) · Spring Data JPA · PostgreSQL · Apache Kafka · Thymeleaf ·
-Prometheus + Grafana + Zipkin (observability) · Maven (multi-module monorepo).
+springdoc-openapi (Swagger UI) · Prometheus + Grafana + Zipkin (observability) ·
+Maven (multi-module monorepo).
 
 ## Architecture
 
@@ -150,6 +151,15 @@ Design decisions and production-style bugs found and fixed along the way:
    declaratively with Bean Validation at the MVC edge — an invalid subscription
    form or catalog entry gets a `400` problem body before any business code or
    neighbour call runs.
+10. **API documentation derived from code, not written by hand.** Every API
+    service serves a runtime-generated OpenAPI document and Swagger UI
+    (springdoc; see [API documentation](#api-documentation)), so the docs
+    cannot drift from the controllers: the Bean Validation constraints from
+    highlight 9 surface as schema rules automatically, JWT auth is declared
+    once as a global `bearer-jwt` scheme, and the two anonymous LiqPay
+    callbacks lift that padlock with an empty `@SecurityRequirements` — the
+    contract honestly shows them as signature-authenticated
+    ([`PaymentController`](services/payment/src/main/java/shop/payment/controller/PaymentController.java)).
 
 ## Getting started
 
@@ -282,6 +292,26 @@ across `docker logs` of any service.
 In host mode the metrics endpoints work as-is and spans are sent to
 `http://localhost:9411` — start the Zipkin container if traces are wanted; a
 missing Zipkin is harmless (spans are dropped with a warning).
+
+## API documentation
+
+Each API service generates a live OpenAPI 3 document from its controllers at
+runtime ([springdoc-openapi](https://springdoc.org/)) and serves an interactive
+Swagger UI:
+
+| Service | Swagger UI (host mode) | OpenAPI document |
+|---|---|---|
+| product | http://localhost:8082/swagger-ui.html | http://localhost:8082/v3/api-docs |
+| cart | http://localhost:8083/swagger-ui.html | http://localhost:8083/v3/api-docs |
+| order | http://localhost:8084/swagger-ui.html | http://localhost:8084/v3/api-docs |
+| payment | http://localhost:8085/swagger-ui.html | http://localhost:8085/v3/api-docs |
+
+The **Authorize** button accepts a bearer access token (user token or a
+`client_credentials` token for the internal endpoints), so requests can be
+executed straight from the browser. In the compose stack only payment's port is
+published to the host — the other services' documentation stays reachable from
+inside the compose network only, matching the deliberately minimal exposed
+surface (9000/8080/8085).
 
 ## Tests
 

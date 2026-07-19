@@ -32,6 +32,9 @@ public class SecurityConfig {
                     // from inside the compose network, no token available there
                     .requestMatchers("/actuator/health/**", "/actuator/prometheus")
                     .permitAll()
+                    // API documentation (springdoc): open in this demo project
+                    .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html")
+                    .permitAll()
                     // service-to-service API (payment callback): client_credentials token
                     .requestMatchers(HttpMethod.POST, "/internal/orders/**")
                     .hasAuthority("SCOPE_orders.write")
