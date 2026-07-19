@@ -11,6 +11,18 @@ administrators manage the catalog.
 springdoc-openapi (Swagger UI) · Prometheus + Grafana + Zipkin (observability) ·
 Maven (multi-module monorepo).
 
+![Catalog](docs/images/ui-catalog.jpg)
+
+<details>
+<summary>More screenshots — product page, cart, orders, login</summary>
+
+| | |
+|---|---|
+| ![Product page](docs/images/ui-product.jpg) | ![Cart](docs/images/ui-cart.jpg) |
+| ![Orders](docs/images/ui-orders.jpg) | ![Login](docs/images/ui-login.jpg) |
+
+</details>
+
 ## Architecture
 
 ```mermaid
@@ -280,14 +292,19 @@ surface stays closed. The compose stack ships the monitoring/tracing trio:
 | Grafana | http://localhost:3000 (`admin`/`admin`) | Prometheus datasource provisioned from `infra/docker/grafana/provisioning`; import dashboard `4701` (JVM Micrometer) and switch services via the `application` variable |
 | Zipkin | http://localhost:9411 | distributed trace storage and UI |
 
+![Grafana JVM (Micrometer) dashboard](docs/images/grafana-jvm.jpg)
+
 Distributed tracing uses Micrometer Tracing with the Brave bridge: spans cover
 incoming HTTP, outgoing `RestClient` calls and the Kafka leg (auth → cart);
 the W3C `traceparent` header propagates the trace across service boundaries,
 and spans are reported to Zipkin (100% sampling — a demo setting; production
 would sample a few percent). A checkout shows up as a single
-client → order → cart → product waterfall. Logs carry a
+client → order → cart waterfall (adding an item to the cart traces
+client → cart → product through the stock reservation). Logs carry a
 `[service,traceId,spanId]` prefix, so a trace found in Zipkin can be grepped
 across `docker logs` of any service.
+
+![Zipkin checkout trace](docs/images/zipkin-trace.jpg)
 
 In host mode the metrics endpoints work as-is and spans are sent to
 `http://localhost:9411` — start the Zipkin container if traces are wanted; a
@@ -379,4 +396,5 @@ infra/docker/kafka/       Kafka cluster for local development
 infra/docker/prometheus/  Prometheus scrape configuration
 infra/docker/grafana/     Grafana provisioning (datasource)
 scripts/                  development utilities (LiqPay callback emulator)
+docs/images/              README screenshots
 ```
