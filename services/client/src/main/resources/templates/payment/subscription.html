@@ -1,163 +1,65 @@
 <!DOCTYPE html>
 <html lang="uk" xmlns:th="http://www.thymeleaf.org">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Оформлення платіжної підписки</title>
-    <style>
-        body {
-            background-color: #121212;
-            color: #fff;
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-        }
-
-        .container {
-            max-width: 600px;
-            margin: 50px auto;
-            padding: 25px;
-            border: 2px solid #fff;
-            border-radius: 10px;
-            background-color: #1f1f1f;
-        }
-
-        h1 {
-            text-align: center;
-            color: #00FF7F;
-            margin-bottom: 20px;
-        }
-
-        .summary {
-            margin-bottom: 30px;
-            padding: 15px;
-            border: 1px solid #444;
-            border-radius: 8px;
-            background-color: #2a2a2a;
-        }
-
-        .summary h2 {
-            margin-top: 0;
-            text-align: center;
-            color: #00FF7F;
-        }
-
-        .summary p {
-            text-align: center;
-            margin: 5px 0;
-            font-size: 18px;
-        }
-
-        form {
-            display: flex;
-            flex-direction: column;
-        }
-
-        label {
-            margin-top: 12px;
-            margin-bottom: 4px;
-            font-weight: bold;
-        }
-
-        input, select {
-            padding: 10px;
-            border: none;
-            border-radius: 6px;
-            background-color: #2a2a2a;
-            color: #fff;
-            font-size: 14px;
-        }
-
-        input:focus, select:focus {
-            outline: 2px solid #00FF7F;
-        }
-
-        .form-row {
-            margin-top: 10px;
-            display: flex;
-            gap: 10px;
-        }
-
-        .form-row input {
-            margin-top: 5px;
-            flex: 1;
-        }
-
-        .submit-btn {
-            margin-top: 25px;
-            background-color: #00FF7F;
-            color: #000;
-            font-weight: bold;
-            border: none;
-            border-radius: 6px;
-            padding: 12px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-
-        .submit-btn:hover {
-            background-color: #00cc66;
-        }
-
-        .back-link {
-            display: block;
-            margin-top: 15px;
-            text-align: center;
-            color: #00FF7F;
-        }
-    </style>
-</head>
+<head th:replace="~{fragments/layout :: head('Оформлення платіжної підписки')}"></head>
 <body>
 
-<div class="container">
+<th:block th:replace="~{fragments/layout :: header}"/>
 
-    <div class="summary">
-        <h2>Оформлення платіжної підписки на обрані товари</h2>
-        <p th:text="'Сума до сплати: ' + ${subscriptionPrice} + ' ' + ${subscriptionCurrency}">Сума до сплати: 10 UAH</p>
-    </div>
+<main class="page page-narrow">
+    <h1 class="page-title">Оформлення платіжної підписки</h1>
 
-    <form th:action="@{/subscription}" th:object="${subscriptionForm}" method="post">
+    <div class="banner banner-success"
+         th:text="|Сума до сплати: ${subscriptionPrice} ${subscriptionCurrency}|">Сума до сплати</div>
 
-        <label for="phone">Номер телефону (+380...)</label>
-        <input type="tel" id="phone" th:field="*{phone}" placeholder="+380XXXXXXXXX" pattern="^\+380\d{9}$" required>
+    <form class="card" th:action="@{/subscription}" th:object="${subscriptionForm}" method="post">
 
-        <label for="time">Час першого платежу</label>
-        <input type="time" id="time" th:field="*{startTime}" required>
+        <label class="form-label" for="phone">Номер телефону (+380...)</label>
+        <input class="form-control" type="tel" id="phone" th:field="*{phone}"
+               placeholder="+380XXXXXXXXX" pattern="^\+380\d{9}$" required>
 
-        <label for="date">День першого платежу</label>
-        <input type="date" id="date" th:field="*{startDate}" required>
+        <label class="form-label" for="time">Час першого платежу</label>
+        <input class="form-control" type="time" id="time" th:field="*{startTime}" required>
 
-        <label for="periodicity">Періодичність замовлення</label>
-        <select id="periodicity" th:field="*{periodicity}" required>
+        <label class="form-label" for="date">День першого платежу</label>
+        <input class="form-control" type="date" id="date" th:field="*{startDate}" required>
+
+        <label class="form-label" for="periodicity">Періодичність замовлення</label>
+        <select class="form-control" id="periodicity" th:field="*{periodicity}" required>
             <option value="day">Щодня</option>
             <option value="week">Щотижня</option>
             <option value="month">Щомісяця</option>
             <option value="year">Щороку</option>
         </select>
 
-        <label for="cardNumber">Номер картки</label>
-        <input type="text" id="cardNumber" th:field="*{cardNumber}" maxlength="16" pattern="\d{16}" placeholder="XXXX XXXX XXXX XXXX" required>
+        <label class="form-label" for="cardNumber">Номер картки</label>
+        <input class="form-control" type="text" id="cardNumber" th:field="*{cardNumber}"
+               maxlength="16" pattern="\d{16}" placeholder="XXXX XXXX XXXX XXXX" required>
 
         <div class="form-row">
             <div>
-                <label for="expMonth">Місяць дії картки</label>
-                <input type="number" id="expMonth" th:field="*{expMonth}" min="1" max="12" placeholder="MM" required>
+                <label class="form-label" for="expMonth">Місяць дії картки</label>
+                <input class="form-control" type="number" id="expMonth" th:field="*{expMonth}"
+                       min="1" max="12" placeholder="MM" required>
             </div>
             <div>
-                <label for="expYear">Рік дії картки</label>
-                <input type="number" id="expYear" th:field="*{expYear}" min="24" max="99" placeholder="YY" required>
+                <label class="form-label" for="expYear">Рік дії картки</label>
+                <input class="form-control" type="number" id="expYear" th:field="*{expYear}"
+                       min="24" max="99" placeholder="YY" required>
             </div>
             <div>
-                <label for="cvv">CVV</label>
-                <input type="password" id="cvv" th:field="*{cvv}" maxlength="3" pattern="\d{3}" required>
+                <label class="form-label" for="cvv">CVV</label>
+                <input class="form-control" type="password" id="cvv" th:field="*{cvv}"
+                       maxlength="3" pattern="\d{3}" required>
             </div>
         </div>
 
-        <button type="submit" class="submit-btn">Підтвердити підписку</button>
+        <div class="actions">
+            <button type="submit" class="btn btn-primary btn-block">Підтвердити підписку</button>
+        </div>
     </form>
 
-    <a class="back-link" href="/cart">Повернутися до кошика</a>
-</div>
+    <a class="back-link" th:href="@{/cart}">Повернутися до кошика</a>
+</main>
 
 </body>
 </html>

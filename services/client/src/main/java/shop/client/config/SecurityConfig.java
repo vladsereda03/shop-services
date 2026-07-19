@@ -42,6 +42,9 @@ public class SecurityConfig {
                     // from inside the compose network, no session there
                     .requestMatchers("/actuator/health/**", "/actuator/prometheus")
                     .permitAll()
+                    // static assets: no session needed to fetch the stylesheet
+                    .requestMatchers("/css/**")
+                    .permitAll()
                     .requestMatchers("/goods/add")
                     .hasRole("ADMIN")
                     .anyRequest()

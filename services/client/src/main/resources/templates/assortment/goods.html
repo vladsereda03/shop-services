@@ -1,162 +1,25 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org"
-      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
-<head>
-    <meta charset="UTF-8">
-    <title>Товари</title>
-    <style>
-        * {
-            box-sizing: border-box;
-        }
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #333;
-            color: #fff;
-        }
-        .container {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: space-between;
-            margin: 0 -10px;
-        }
-        .item {
-            width: calc(25% - 20px);
-            margin: 0 10px 20px;
-            background-color: #444;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            transition: background-color 0.3s ease;
-        }
-        .item img {
-            max-width: 100%;
-            height: auto;
-            display: block;
-            margin-bottom: 10px;
-        }
-        .item-title {
-            font-weight: bold;
-            margin-bottom: 5px;
-            color: white;
-        }
-        .item-price {
-            color: #20B2AA;
-            font-size: 14px;
-        }
-
-        .profile-tab {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background-color: #4CAF50;
-            padding: 10px 20px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-            cursor: pointer;
-        }
-
-        .profile-content {
-            display: none;
-            position: fixed;
-            top: 60px;
-            right: 20px;
-            background-color: #444;
-            border: 1px solid #888;
-            border-radius: 5px;
-            padding: 20px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-        }
-
-        .profile-content.show {
-            display: block;
-        }
-
-        .profile-info p {
-            margin: 5px 0;
-        }
-
-        .profile-actions button {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            cursor: pointer;
-            font-size: 14px;
-            margin-top: 10px;
-            border-radius: 5px;
-        }
-
-        .profile-actions button + button {
-            margin-left: 10px;
-        }
-
-        .profile-actions form {
-            display: inline;
-            margin-left: 10px;
-        }
-    </style>
-</head>
+<html lang="uk" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Каталог')}"></head>
 <body>
 
-<div class="profile-tab" id="profile-btn">Профіль</div>
+<th:block th:replace="~{fragments/layout :: header}"/>
 
-<div class="profile-content" id="profile-content">
-    <div class="profile-info">
-        <p><strong>Username:</strong> <span th:text="${user.getUsername()}">username</span></p>
-        <p><strong>ПІБ:</strong> <span th:text="${user.getFullName()}">fullName</span></p>
-        <p><strong>Email:</strong> <span th:text="${user.getEmail()}">email</span></p>
-    </div>
-    <div class="profile-actions">
-        <button onclick="goToCart()">Кошик</button>
-        <button onclick="goToOrders()">Замовлення</button>
-        <button sec:authorize="hasRole('ADMIN')" onclick="goToAddGood()">Додати товар</button>
-        <form th:action="@{/logout}" method="post"
-              onsubmit="return confirm('Ви впевнені, що бажаєте вийти?')">
-            <button type="submit">Вихід</button>
-        </form>
-    </div>
-</div>
+<main class="page">
+    <h1 class="page-title">Каталог</h1>
 
-<script>
-    function goToCart() {
-        window.location.href = "/cart";
-    }
-
-    function goToOrders() {
-        window.location.href = "/orders";
-    }
-
-    function goToAddGood() {
-        window.location.href = "/goods/add";
-    }
-
-    var profileBtn = document.getElementById("profile-btn");
-    var profileContent = document.getElementById("profile-content");
-
-    profileBtn.addEventListener("click", function() {
-        profileContent.classList.toggle("show");
-    });
-
-    document.addEventListener("click", function(event) {
-        var isClickInsideProfile = profileBtn.contains(event.target) || profileContent.contains(event.target);
-
-        if (!isClickInsideProfile) {
-            profileContent.classList.remove("show");
-        }
-    });
-</script>
-
-<div class="container">
-    <div class="item" th:each="good : ${goods}">
-        <a th:href="@{/goods/{id}(id=${good.getId()})}">
-            <img th:src="|data:image/jpg;base64,${good.imageBase64}|" height="350px" width="350px" alt="Product Image">
-            <div class="item-title" th:text="${good.getName()}"></div>
-            <div class="item-price" th:text="'Ціна, грн.: ' + ${good.getPriceGrn()}"></div>
+    <div class="goods-grid">
+        <a class="good-card" th:each="good : ${goods}" th:href="@{/goods/{id}(id=${good.getId()})}">
+            <img th:src="|data:image/jpg;base64,${good.imageBase64}|" alt="Фото товару">
+            <div class="good-card-body">
+                <div class="good-card-title" th:text="${good.getName()}"></div>
+                <div class="price" th:text="|${good.getPriceGrn()} грн|"></div>
+            </div>
         </a>
     </div>
-</div>
+
+    <p class="empty-state" th:if="${#lists.isEmpty(goods)}">Каталог порожній</p>
+</main>
 
 </body>
 </html>

@@ -1,150 +1,53 @@
 <!DOCTYPE html>
 <html lang="uk" xmlns:th="http://www.thymeleaf.org">
-<head>
-    <meta charset="UTF-8">
-    <title>Додати товар</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #333;
-            color: #fff;
-        }
-
-        .container {
-            display: flex;
-            justify-content: center;
-            margin-top: 50px;
-        }
-
-        .form-card {
-            background-color: #444;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-            width: 400px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .form-card h2 {
-            text-align: center;
-            margin: 0 0 15px 0;
-        }
-
-        label {
-            font-weight: bold;
-        }
-
-        input, textarea, select {
-            padding: 8px;
-            border-radius: 5px;
-            border: none;
-            width: 100%;
-        }
-
-        textarea {
-            resize: vertical;
-        }
-
-        button {
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-
-        button:hover {
-            background-color: #45a049;
-        }
-
-        .error-banner {
-            background-color: #7f1d1d;
-            color: #fecaca;
-            padding: 12px;
-            border-radius: 5px;
-            text-align: center;
-        }
-
-        .back-link {
-            color: #20B2AA;
-            text-align: center;
-            display: block;
-        }
-
-        /* Кастомне завантаження файлу */
-        input[type="file"] {
-            display: none;
-        }
-
-        .custom-file-upload {
-            display: inline-block;
-            background-color: #4caf50;
-            color: white;
-            padding: 6px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            text-align: center;
-        }
-
-        .custom-file-upload:hover {
-            background-color: #45a049;
-        }
-
-        #fileName {
-            margin-left: 10px;
-            color: #ccc;
-            font-style: italic;
-        }
-    </style>
-</head>
+<head th:replace="~{fragments/layout :: head('Додати товар')}"></head>
 <body>
 
-<div class="container">
-    <form th:action="@{/goods/add}" method="post" enctype="multipart/form-data"
-          th:object="${good}" class="form-card">
+<th:block th:replace="~{fragments/layout :: header}"/>
 
-        <h2>Додати товар</h2>
+<main class="page page-narrow">
+    <h1 class="page-title">Додати товар</h1>
 
-        <div class="error-banner" th:if="${addGoodError}" th:text="${addGoodError}"></div>
+    <div class="banner banner-error" th:if="${addGoodError}" th:text="${addGoodError}"></div>
 
-        <label>Назва:</label>
-        <input type="text" th:field="*{name}" required>
+    <form class="card" th:action="@{/goods/add}" method="post" enctype="multipart/form-data"
+          th:object="${good}">
 
-        <label>Ціна (коп.):</label>
-        <input type="number" th:field="*{priceKopeck}" min="0" required>
+        <label class="form-label">Назва:</label>
+        <input class="form-control" type="text" th:field="*{name}" required>
 
-        <label>Опис:</label>
-        <textarea th:field="*{description}" rows="3"></textarea>
+        <label class="form-label">Ціна (коп.):</label>
+        <input class="form-control" type="number" th:field="*{priceKopeck}" min="0" required>
 
-        <label>Категорія:</label>
-        <input type="text" th:field="*{category}">
+        <label class="form-label">Опис:</label>
+        <textarea class="form-control" th:field="*{description}" rows="3"></textarea>
 
-        <label>Кількість:</label>
-        <input type="number" th:field="*{quantity}" min="0" required>
+        <label class="form-label">Категорія:</label>
+        <input class="form-control" type="text" th:field="*{category}">
 
-        <label>Виробники:</label>
-        <select th:field="*{manufacturerIds}" multiple>
+        <label class="form-label">Кількість:</label>
+        <input class="form-control" type="number" th:field="*{quantity}" min="0" required>
+
+        <label class="form-label">Виробники:</label>
+        <select class="form-control" th:field="*{manufacturerIds}" multiple>
             <option th:each="m : ${manufacturers}"
                     th:value="${m.id}"
                     th:text="${m.name}"></option>
         </select>
 
-        <label for="imageFile" class="custom-file-upload">Обрати фото</label>
-        <input id="imageFile" type="file" name="imageFile" accept="image/*">
-        <span id="fileName">Файл не вибрано</span>
+        <div class="file-upload">
+            <label for="imageFile" class="btn btn-secondary btn-sm">Обрати фото</label>
+            <input id="imageFile" type="file" name="imageFile" accept="image/*">
+            <span id="fileName" class="file-name">Файл не вибрано</span>
+        </div>
 
-        <button type="submit">Додати</button>
-
-        <a class="back-link" th:href="@{/}">Повернутися до каталогу</a>
+        <div class="actions">
+            <button type="submit" class="btn btn-primary btn-block">Додати</button>
+        </div>
     </form>
-</div>
+
+    <a class="back-link" th:href="@{/}">Повернутися до каталогу</a>
+</main>
 
 <script>
     const input = document.getElementById('imageFile');

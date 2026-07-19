@@ -1,81 +1,34 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Замовлення</title>
-    <style>
-        body {
-            background-color: #121212;
-            color: #fff;
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-        }
-        .container {
-            max-width: 800px;
-            margin: 50px auto;
-            padding: 20px;
-            border: 2px solid #fff;
-            border-radius: 10px;
-            background-color: #1f1f1f;
-        }
-        h1 {
-            text-align: center;
-        }
-        h2 {
-            text-align: center;
-        }
-        .cart-item {
-            margin-bottom: 10px;
-            padding: 10px;
-            border-bottom: 1px solid #fff;
-        }
-        .cart-item:last-child {
-            border-bottom: none;
-        }
-        .actions > * {
-            display: inline-block;
-        }
-        .price {
-            color: #00FF7F;
-            font-size: 20px;
-        }
-        .time {
-            color: #FF5733;
-            font-size: 20px;
-        }
-        .back {
-            display: block;
-            text-align: center;
-            margin: 20px auto;
-            color: #00aaff;
-            text-decoration: none;
-        }
-        .back:hover {
-            text-decoration: underline;
-        }
-    </style>
-</head>
+<html lang="uk" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Замовлення')}"></head>
 <body>
-<h1>Ваші замовлення</h1>
 
-<div class="container" th:if="${#lists.isEmpty(orders)}">
-    <h2>У вас ще немає замовлень</h2>
-</div>
+<th:block th:replace="~{fragments/layout :: header}"/>
 
-<div class="container" th:each="order : ${orders}">
-    <h2 th:text="'Замовлення №' + ${order.id}">Order id</h2>
-    <div class="cart-item" th:each="item : ${order.items}">
-        <span><span th:text="${item.name} + ': '"></span><span th:text="${item.quantity} + ' од.'"></span></span>
+<main class="page page-narrow">
+    <h1 class="page-title">Ваші замовлення</h1>
+
+    <p class="empty-state" th:if="${#lists.isEmpty(orders)}">У вас ще немає замовлень</p>
+
+    <div class="card order-card" th:each="order : ${orders}">
+        <div class="order-header">
+            <h2 th:text="|Замовлення №${order.id}|">Замовлення №</h2>
+            <span class="order-date" th:text="${order.createdAt}">час оформлення</span>
+        </div>
+
+        <div class="cart-line" th:each="item : ${order.items}">
+            <span class="cart-line-name" th:text="${item.name}"></span>
+            <span class="cart-line-qty" th:text="|${item.quantity} од.|"></span>
+        </div>
+
+        <div class="cart-total">
+            <span>Разом</span>
+            <span class="price" th:text="|${order.totalGrn} грн|"></span>
+        </div>
     </div>
 
-    <div class="price" th:text="'Ціна: ' + ${order.totalGrn} + ' UAH'"></div>
-    <div class="time" th:text="'Час оформлення: ' + ${order.createdAt}"></div>
-
-</div>
-
-<a class="back" href="/">До каталогу</a>
+    <a class="back-link" th:href="@{/}">До каталогу</a>
+</main>
 
 </body>
 </html>

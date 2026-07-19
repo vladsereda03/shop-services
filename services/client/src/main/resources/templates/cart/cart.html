@@ -1,103 +1,39 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Кошик</title>
-    <style>
-        body {
-            background-color: #121212;
-            color: #fff;
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-        }
-        .container {
-            max-width: 800px;
-            margin: 50px auto;
-            padding: 20px;
-            border: 2px solid #fff;
-            border-radius: 10px;
-            background-color: #1f1f1f;
-        }
-        h1 {
-            text-align: center;
-        }
-        .cart-item {
-            margin-bottom: 10px;
-            padding: 10px;
-            border-bottom: 1px solid #fff;
-        }
-        .cart-item:last-child {
-            border-bottom: none;
-        }
-        .btn {
-            display: inline-block;
-            padding: 10px 20px;
-            margin-right: 10px;
-            border: none;
-            border-radius: 5px;
-            background-color: #007bff;
-            color: #fff;
-            text-decoration: none;
-            cursor: pointer;
-        }
-        .btn:hover {
-            background-color: #0056b3;
-        }
-        .actions > * {
-            display: inline-block;
-        }
-        .price {
-            color: #00FF7F;
-            font-size: 20px;
-        }
-    </style>
-</head>
+<html lang="uk" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Кошик')}"></head>
 <body>
-<div class="container">
-    <h1>Кошик</h1>
 
-    <div th:if="${orderError}" th:text="${orderError}"
-         style="background-color: #b33; color: #fff; padding: 10px; border-radius: 5px; margin-bottom: 10px;"></div>
+<th:block th:replace="~{fragments/layout :: header}"/>
 
-    <div th:if="${subscriptionSuccess}" th:text="${subscriptionSuccess}"
-         style="background-color: #14532d; color: #fff; padding: 10px; border-radius: 5px; margin-bottom: 10px;"></div>
+<main class="page page-narrow">
+    <h1 class="page-title">Кошик</h1>
 
-    <div class="cart-item" th:each="item : ${items}">
-        <span>
-            <span th:text="${item.name} + ': '"></span><span th:text="${item.quantity} + ' од.'"></span>
-            <span class="price" th:text="' — ' + ${item.totalGrn} + ' грн'"></span>
-        </span>
+    <div class="banner banner-error" th:if="${orderError}" th:text="${orderError}"></div>
+    <div class="banner banner-success" th:if="${subscriptionSuccess}" th:text="${subscriptionSuccess}"></div>
+
+    <div class="card">
+        <div class="cart-line" th:each="item : ${items}">
+            <span class="cart-line-name" th:text="${item.name}"></span>
+            <span class="cart-line-qty" th:text="|${item.quantity} од.|"></span>
+            <span class="price" th:text="|${item.totalGrn} грн|"></span>
+        </div>
+
+        <p class="empty-state" th:if="${#lists.isEmpty(items)}">Кошик порожній</p>
+
+        <div class="cart-total" th:unless="${#lists.isEmpty(items)}">
+            <span>Разом</span>
+            <span class="price" th:text="|${price} грн|"></span>
+        </div>
     </div>
-
-    <div class="cart-item" th:if="${#lists.isEmpty(items)}">Кошик порожній</div>
-
-    <div class="price" th:text="'Ціна: ' + ${price} + ' UAH'"></div>
 
     <div class="actions">
-        <button class="btn" id="clear-cart" onclick="clearCart()">Очистити кошик</button>
-        <button class="btn" id="checkout" onclick="checkout()">Оформити замовлення</button>
-        <button class="btn" id="subscribe" onclick="goToSubscriptionForm()">Регулярна підписка</button>
+        <a class="btn btn-secondary" th:href="@{/cart/clear}">Очистити кошик</a>
+        <a class="btn btn-primary" th:href="@{/orders/checkout}">Оформити замовлення</a>
+        <a class="btn btn-secondary" th:href="@{/subscription/new}">Регулярна підписка</a>
         <!-- платіжна форма LiqPay (HTML генерує payment-сервіс) -->
-        <div th:if="${liqpayForm}" th:utext="${liqpayForm}"></div>
+        <div class="liqpay-form" th:if="${liqpayForm}" th:utext="${liqpayForm}"></div>
     </div>
-
-</div>
-
-<script>
-    function clearCart() {
-        window.location.href = "/cart/clear";
-    }
-
-    function checkout() {
-        window.location.href = "/orders/checkout";
-    }
-
-    function goToSubscriptionForm() {
-        window.location.href = "/subscription/new";
-    }
-</script>
+</main>
 
 </body>
 </html>

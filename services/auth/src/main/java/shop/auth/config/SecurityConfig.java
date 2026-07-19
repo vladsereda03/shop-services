@@ -116,6 +116,9 @@ public class SecurityConfig {
                     // from inside the compose network, no session there
                     .requestMatchers("/actuator/health/**", "/actuator/prometheus")
                     .permitAll()
+                    // static assets: the login/signup pages load the stylesheet pre-auth
+                    .requestMatchers("/css/**")
+                    .permitAll()
                     .requestMatchers("/account/signup/**")
                     .permitAll() // open registration
                     .requestMatchers("/account/login/**")

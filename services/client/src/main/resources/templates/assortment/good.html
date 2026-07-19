@@ -1,250 +1,71 @@
 <!DOCTYPE html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head>
-  <meta charset="UTF-8">
-  <title>Товар</title>
-  <style>
-    * {
-      box-sizing: border-box;
-    }
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 20px;
-      background-color: #222;
-      color: #fff;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-    }
-    .container {
-      width: 100%;
-      max-width: 600px;
-    }
-    .item {
-      background-color: #333;
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-      transition: background-color 0.3s ease;
-    }
-    .item img {
-      max-width: 100%;
-      height: auto;
-      display: block;
-      margin-bottom: 10px;
-      border-radius: 8px;
-    }
-    .item-title {
-      font-weight: bold;
-      margin-bottom: 5px;
-    }
-    .item-price {
-      font-size: 14px;
-    }
-    .item-category,
-    .item-availability,
-    .item-manufacturer,
-    .item-description {
-      margin-top: 10px;
-      font-size: 14px;
-    }
-
-    .item-description {
-      font-style: italic;
-    }
-
-    .manufacturers {
-      margin-top: 10px;
-    }
-
-    .manufacturer {
-      margin-right: 10px;
-      display: inline-block;
-      background-color: #555;
-      padding: 5px 10px;
-      border-radius: 5px;
-    }
-    .quantity-controls {
-      display: flex;
-      align-items: center;
-      margin-top: 10px;
-    }
-    .quantity-controls button {
-      background-color: transparent;
-      color: #fff;
-      border: none;
-      cursor: pointer;
-      font-size: 18px;
-    }
-    .quantity-display {
-      margin: 0 10px;
-      font-size: 16px;
-      color: #7FFF00;
-    }
-    .btn-submit {
-      background-color: #4CAF50;
-      border: none;
-      color: white;
-      padding: 10px 20px;
-      text-align: center;
-      text-decoration: none;
-      display: inline-block;
-      font-size: 16px;
-      margin-top: 10px;
-      cursor: pointer;
-      transition: background-color 0.3s ease;
-      border-radius: 5px;
-    }
-    .btn-submit:hover {
-      background-color: #45a049;
-    }
-
-    .profile-tab {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background-color: #4CAF50;
-      padding: 10px 20px;
-      border-radius: 5px;
-      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-      cursor: pointer;
-    }
-
-    .profile-content {
-      display: none;
-      position: fixed;
-      top: 60px;
-      right: 20px;
-      background-color: #444;
-      border: 1px solid #888;
-      border-radius: 5px;
-      padding: 20px;
-      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-    }
-
-    .profile-content.show {
-      display: block;
-    }
-
-    .profile-info p {
-      margin: 5px 0;
-    }
-
-    .profile-actions button {
-      background-color: #4CAF50;
-      color: white;
-      border: none;
-      padding: 8px 15px;
-      cursor: pointer;
-      font-size: 14px;
-      margin-top: 10px;
-      border-radius: 5px;
-    }
-
-    .profile-actions button + button {
-      margin-left: 10px;
-    }
-
-    .profile-actions form {
-      display: inline;
-      margin-left: 10px;
-    }
-  </style>
-</head>
+<html lang="uk" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Товар')}"></head>
 <body>
 
-<div class="profile-tab" id="profile-btn">Профіль</div>
+<th:block th:replace="~{fragments/layout :: header}"/>
 
-<div class="profile-content" id="profile-content">
-  <div class="profile-info">
-    <p><strong>Username:</strong> <span th:text="${user.getUsername()}">username</span></p>
-    <p><strong>ПІБ:</strong> <span th:text="${user.getFullName()}">fullName</span></p>
-    <p><strong>Email:</strong> <span th:text="${user.getEmail()}">email</span></p>
-  </div>
-  <div class="profile-actions">
-    <button onclick="goToCart()">Кошик</button>
-    <button onclick="goToOrders()">Замовлення</button>
-    <form th:action="@{/logout}" method="post"
-          onsubmit="return confirm('Ви впевнені, що бажаєте вийти?')">
-      <button type="submit">Вихід</button>
-    </form>
-  </div>
-</div>
+<main class="page">
+    <div class="banner banner-error" th:if="${cartError}" th:text="${cartError}"></div>
 
-<script>
-  function goToCart() {
-    window.location.href = "/cart";
-  }
+    <div class="card good-detail">
+        <img class="good-detail-photo" th:src="|data:image/jpg;base64,${good.imageBase64}|" alt="Фото товару">
 
-  function goToOrders() {
-    window.location.href = "/orders";
-  }
+        <div>
+            <h1 th:text="${good.getName()}"></h1>
+            <div class="price" th:text="|${good.getPriceGrn()} грн|"></div>
 
-  var profileBtn = document.getElementById("profile-btn");
-  var profileContent = document.getElementById("profile-content");
+            <p class="meta-row">
+                <span class="meta-label">Категорія:</span>
+                <span th:text="${category}"></span>
+            </p>
+            <p class="meta-row">
+                <span class="meta-label">Доступність:</span>
+                <span th:text="${isAvailable}"
+                      th:classappend="${good.getQuantity() > 0} ? 'availability-in' : 'availability-out'"></span>
+            </p>
+            <p class="meta-row"><span class="meta-label">Виробники:</span></p>
+            <div class="chips">
+                <span class="chip" th:each="manufacturer : ${good.getManufacturers()}"
+                      th:text="${manufacturer.getName()}"></span>
+            </div>
+            <p class="meta-row" th:if="${good.getDescription()}">
+                <span class="meta-label">Опис:</span>
+                <span th:text="${good.getDescription()}"></span>
+            </p>
 
-  profileBtn.addEventListener("click", function() {
-    profileContent.classList.toggle("show");
-  });
-
-  document.addEventListener("click", function(event) {
-    var isClickInsideProfile = profileBtn.contains(event.target) || profileContent.contains(event.target);
-
-    if (!isClickInsideProfile) {
-      profileContent.classList.remove("show");
-    }
-  });
-</script>
-
-<!-- ///////////////////////////////////////////////////////////////////////////////////////////////////////////// -->
-
-
-<div class="container">
-  <div th:if="${cartError}" th:text="${cartError}"
-       style="background-color: #b33; color: #fff; padding: 10px; border-radius: 5px; margin-bottom: 10px;"></div>
-  <div class="item">
-    <img th:src="|data:image/jpg;base64,${good.imageBase64}|" height="350px" width="350px" alt="Product Image">
-    <div class="item-title" th:text="${good.getName()}"></div>
-    <div class="item-price" th:text="'Ціна, грн.: ' + ${good.getPriceGrn()}"></div>
-    <div class="item-category" th:text="'Категорія: ' + ${category}"></div>
-    <div class="item-availability" th:text="'Доступність: ' + ${isAvailable}"></div>
-    <div class="manufacturers">
-      <span>Виробники:</span>
-      <span th:each="manufacturer : ${good.getManufacturers()}" class="manufacturer" th:text="${manufacturer.getName()}"></span>
+            <div class="actions">
+                <div class="stepper">
+                    <button type="button" onclick="decrementQuantity()">−</button>
+                    <div class="quantity-display">1</div>
+                    <button type="button" onclick="incrementQuantity()">+</button>
+                </div>
+                <button class="btn btn-primary" onclick="submitQuantity()">В кошик</button>
+            </div>
+        </div>
     </div>
-    <div class="item-description" th:text="'Опис: ' + ${good.getDescription()}"></div>
-    <div class="quantity-controls">
-      <button onclick="decrementQuantity()">-</button>
-      <div class="quantity-display">1</div>
-      <button onclick="incrementQuantity()">+</button>
-    </div>
-    <button class="btn-submit" onclick="submitQuantity()">В кошик</button>
-  </div>
-</div>
+</main>
 
 <script th:inline="javascript">
-  let quantityDisplay = document.querySelector('.quantity-display');
-  let quantity = 1;
+    let quantityDisplay = document.querySelector('.quantity-display');
+    let quantity = 1;
 
-  function incrementQuantity() {
-    quantity++;
-    quantityDisplay.textContent = quantity;
-  }
-
-  function decrementQuantity() {
-    if (quantity > 1) {
-      quantity--;
-      quantityDisplay.textContent = quantity;
+    function incrementQuantity() {
+        quantity++;
+        quantityDisplay.textContent = quantity;
     }
-  }
 
-  function submitQuantity() {
-    const goodId = /*[[${good.id}]]*/ 0;
-    window.location.href = '/cart/add?goodId=' + goodId + '&quantity=' + quantity;
-  }
+    function decrementQuantity() {
+        if (quantity > 1) {
+            quantity--;
+            quantityDisplay.textContent = quantity;
+        }
+    }
 
+    function submitQuantity() {
+        const goodId = /*[[${good.id}]]*/ 0;
+        window.location.href = '/cart/add?goodId=' + goodId + '&quantity=' + quantity;
+    }
 </script>
 
 </body>

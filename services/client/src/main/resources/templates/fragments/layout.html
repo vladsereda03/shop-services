@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="uk" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<!-- Shared fragments: every page pulls its <head> and the site header from here. -->
+<head th:fragment="head(title)">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${title}">Shop</title>
+    <link rel="stylesheet" th:href="@{/css/shop.css}">
+</head>
+<body>
+
+<!-- The profile dropdown renders only when the page put ${user} into the model
+     (catalog and good pages); the logout button is available everywhere. -->
+<th:block th:fragment="header">
+    <header class="site-header">
+        <div class="site-header-inner">
+            <a class="brand" th:href="@{/}">Shop<span class="brand-dot">.</span></a>
+            <nav class="nav">
+                <a class="nav-link" th:href="@{/}">Каталог</a>
+                <a class="nav-link" th:href="@{/cart}">Кошик</a>
+                <a class="nav-link" th:href="@{/orders}">Замовлення</a>
+                <a class="nav-link" sec:authorize="hasRole('ADMIN')" th:href="@{/goods/add}">Додати товар</a>
+            </nav>
+            <div class="profile" th:if="${user != null}">
+                <button type="button" class="profile-toggle" id="profile-btn">
+                    <span th:text="${user.username}">username</span>
+                </button>
+                <div class="profile-menu" id="profile-menu">
+                    <p class="profile-name" th:text="${user.fullName}">fullName</p>
+                    <p class="profile-email" th:text="${user.email}">email</p>
+                </div>
+            </div>
+            <form th:action="@{/logout}" method="post"
+                  onsubmit="return confirm('Ви впевнені, що бажаєте вийти?')">
+                <button type="submit" class="btn btn-secondary btn-sm">Вихід</button>
+            </form>
+        </div>
+    </header>
+    <script>
+        (function () {
+            var btn = document.getElementById("profile-btn");
+            var menu = document.getElementById("profile-menu");
+            if (!btn) return;
+            btn.addEventListener("click", function () {
+                menu.classList.toggle("show");
+            });
+            document.addEventListener("click", function (event) {
+                if (!btn.contains(event.target) && !menu.contains(event.target)) {
+                    menu.classList.remove("show");
+                }
+            });
+        })();
+    </script>
+</th:block>
+
+</body>
+</html>
