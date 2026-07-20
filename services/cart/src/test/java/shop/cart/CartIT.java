@@ -55,7 +55,7 @@ import shop.event.UserRegisteredEvent;
     })
 @AutoConfigureMockMvc
 @Testcontainers
-class CartIntegrationTest {
+class CartIT {
 
   private static final String PRODUCT_BASE_URL = "http://product.local:8082";
   private static final String USER_REGISTERED_TOPIC = "user-registered-events-topic";

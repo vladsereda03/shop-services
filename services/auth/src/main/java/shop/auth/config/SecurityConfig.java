@@ -176,12 +176,17 @@ public class SecurityConfig {
   }
 
   @Bean
-  public RegisteredClientRepository registeredClientRepository(PasswordEncoder passwordEncoder) {
+  public RegisteredClientRepository registeredClientRepository(
+      PasswordEncoder passwordEncoder,
+      @Value("${CLIENT_OAUTH_SECRET:secret}") String clientSecret,
+      @Value("${CART_SERVICE_SECRET:cart-service-secret}") String cartServiceSecret,
+      @Value("${ORDER_SERVICE_SECRET:order-service-secret}") String orderServiceSecret,
+      @Value("${PAYMENT_SERVICE_SECRET:payment-service-secret}") String paymentServiceSecret) {
     RegisteredClient client =
         RegisteredClient.withId("client")
             .clientId("client")
             .clientName("client")
-            .clientSecret("{noop}secret")
+            .clientSecret("{noop}" + clientSecret)
             .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
             .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
             .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
@@ -211,7 +216,7 @@ public class SecurityConfig {
     RegisteredClient cartServiceClient =
         RegisteredClient.withId("cart-service")
             .clientId("cart-service")
-            .clientSecret("{noop}cart-service-secret")
+            .clientSecret("{noop}" + cartServiceSecret)
             .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
             .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
             .scope("products.read")
@@ -221,7 +226,7 @@ public class SecurityConfig {
     RegisteredClient orderServiceClient =
         RegisteredClient.withId("order-service")
             .clientId("order-service")
-            .clientSecret("{noop}order-service-secret")
+            .clientSecret("{noop}" + orderServiceSecret)
             .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
             .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
             .scope("carts.read")
@@ -231,7 +236,7 @@ public class SecurityConfig {
     RegisteredClient paymentServiceClient =
         RegisteredClient.withId("payment-service")
             .clientId("payment-service")
-            .clientSecret("{noop}payment-service-secret")
+            .clientSecret("{noop}" + paymentServiceSecret)
             .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
             .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
             .scope("orders.write")

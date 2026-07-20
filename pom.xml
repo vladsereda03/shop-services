@@ -136,6 +136,21 @@
         </configuration>
       </plugin>
 
+      <plugin>
+        <!-- integration tests (*IT) run in the integration-test/verify phases, so `mvn test`
+             and `mvn package` stay fast and Docker-free; `mvn verify` (and CI) run them -->
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
     </plugins>
   </build>
 

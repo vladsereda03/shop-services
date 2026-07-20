@@ -56,7 +56,7 @@ import shop.event.UserRegisteredEvent;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Testcontainers
-class AuthIntegrationTest {
+class AuthIT {
 
   private static final String USER_REGISTERED_TOPIC = "user-registered-events-topic";
 

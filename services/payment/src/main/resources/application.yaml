@@ -50,7 +50,6 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
-    show-sql: true
 
   flyway:
     # dev DBs already contain the schema: mark them with a baseline instead of running V1
@@ -68,7 +67,7 @@ spring:
           shop-api:
             provider: auth-server
             client-id: payment-service
-            client-secret: payment-service-secret
+            client-secret: ${PAYMENT_SERVICE_SECRET:payment-service-secret}
             authorization-grant-type: client_credentials
             scope: orders.write,carts.read,carts.write
         provider:
@@ -114,3 +113,12 @@ resilience4j:
         retry-exceptions:
           - org.springframework.web.client.HttpServerErrorException
           - org.springframework.web.client.ResourceAccessException
+
+---
+# dev profile: verbose SQL logging for local runs (SPRING_PROFILES_ACTIVE=dev)
+spring:
+  config:
+    activate:
+      on-profile: dev
+  jpa:
+    show-sql: true

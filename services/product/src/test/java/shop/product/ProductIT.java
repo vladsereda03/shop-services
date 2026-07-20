@@ -49,7 +49,7 @@ import shop.product.service.ProductService;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Testcontainers
-class ProductIntegrationTest {
+class ProductIT {
 
   private static final String ADMIN = "Bearer admin-token";
   private static final String USER = "Bearer user-token";

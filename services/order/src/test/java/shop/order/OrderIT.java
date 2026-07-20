@@ -41,7 +41,7 @@ import shop.order.repository.OrderRepository;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Testcontainers
-class OrderIntegrationTest {
+class OrderIT {
 
   private static final String CART_BASE_URL = "http://cart.local:8083";
   private static final long USER_ID = 42L;

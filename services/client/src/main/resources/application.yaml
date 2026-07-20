@@ -34,7 +34,7 @@ spring:
           client:
             client-id: client
             client-name: client
-            client-secret: secret
+            client-secret: ${CLIENT_OAUTH_SECRET:secret}
             client-authentication-method: client_secret_basic
             provider: auth-service
             authorization-grant-type: authorization_code
@@ -52,12 +52,6 @@ spring:
       enabled: false
 
 
-logging:
-  level:
-    org.hibernate.SQL: DEBUG
-    org.springframework.security: DEBUG
-    org.springframework.web.reactive.function.client: TRACE
-
 management:
   endpoints:
     web:
@@ -73,3 +67,17 @@ management:
     sampling:
       # export every trace — demo setting; production typically samples 1-10%
       probability: 1.0
+
+---
+# dev profile: verbose SQL and security logging for local runs
+# (activate with SPRING_PROFILES_ACTIVE=dev). The base config above stays production-quiet.
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.web.reactive.function.client: TRACE

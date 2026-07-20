@@ -215,6 +215,7 @@ OIDC issuer to match), add to your hosts file:
 | Variable | Used by | Default | Purpose |
 |---|---|---|---|
 | `SPRING_DATASOURCE_USERNAME` / `SPRING_DATASOURCE_PASSWORD` | all services | — (required) | PostgreSQL credentials (shared by all five databases) |
+| `CLIENT_OAUTH_SECRET`, `CART_SERVICE_SECRET`, `ORDER_SERVICE_SECRET`, `PAYMENT_SERVICE_SECRET` | auth + the OAuth2 clients | dev values (e.g. `cart-service-secret`) | OAuth2 client secrets, read by both auth's registered clients and each service's own registration; override in production |
 | `LIQPAY_PUBLIC_KEY` / `LIQPAY_PRIVATE_KEY` | payment | `sandbox_public_key` / `sandbox_private_key` | LiqPay merchant keys; sandbox keys from your LiqPay account are needed only to render the real payment form |
 | `LIQPAY_SUBSCRIBE_ENABLED` | payment | `false` | Register subscriptions in the LiqPay API. Keep `false` with sandbox keys — the LiqPay sandbox does not support subscriptions, so the built-in scheduler emulates recurring charges instead |
 
@@ -233,8 +234,10 @@ registration (auth publishes an event, cart provisions the user's cart).
 mvn package
 ```
 
-This also runs the test suite (Docker must be running for the cart integration
-tests); use `mvn package -DskipTests` to skip it.
+This runs the **unit** tests only (Surefire) — no Docker needed. The
+Testcontainers integration tests run in a later phase, so run the full suite
+with `mvn verify` (Docker required), or skip tests entirely with
+`mvn package -DskipTests`.
 
 Then start the services — auth first (the OAuth2 clients fetch its OIDC
 configuration at startup), the rest in any order:
@@ -249,6 +252,11 @@ java -jar services/client/target/client-1.0-SNAPSHOT.jar
 ```
 
 Open **http://localhost:8080**, register a user and log in.
+
+For verbose local logs (SQL statements, Spring Security), activate the `dev`
+profile — e.g. `SPRING_PROFILES_ACTIVE=dev java -jar ...`, or export it once for
+the shell. The base configuration is production-quiet, so any unprofiled run and
+the Docker Compose stack stay quiet.
 
 ### 5. Seed data
 
@@ -347,15 +355,20 @@ surface (9000/8080/8085).
 
 ## Tests
 
+Unit and integration tests are split across Maven's phases: unit tests run in
+`test` (Surefire), integration tests (named `*IT`) run in `integration-test` /
+`verify` (Failsafe).
+
 ```
-mvn test
+mvn test      # unit tests only — fast, no Docker
+mvn verify    # unit + integration tests (Docker required)
 ```
 
 - **Unit tests** (no infrastructure needed): LiqPay callback processing in
   `payment` (signature verification, duplicate callbacks, status handling),
   subscription creation ordering and rollback in `payment`, catalog validation
   and stock reserve/release in `product`.
-- **Integration tests** (require Docker): full Spring context against real
+- **Integration tests** (`*IT`, require Docker): full Spring context against real
   PostgreSQL and Kafka started by [Testcontainers](https://testcontainers.com/),
   with the neighbour services stubbed at the HTTP level:
   - `auth` — registration persists the user and writes the `user-registered`
@@ -407,8 +420,10 @@ default: daily/weekly/monthly/yearly at 15:00).
   trace splits in two — the DB commit rides the request's trace while the Kafka
   relay runs on the publisher's scheduled thread under its own. Carrying the
   `traceparent` through the outbox row would rejoin them; left as a simplification.
-- Dev secrets (client secrets, DB passwords) are plain-text in configs — fine for
-  a local demo, not for production.
+- Secrets come from the environment — DB credentials, the JWT signing keys, LiqPay
+  keys and the OAuth2 client secrets — with dev defaults baked in for a one-command
+  local run and overridable in production. The committed dev defaults are demo
+  credentials, not real ones.
 - Planned next: Kubernetes manifests, an API gateway.
 
 ## Repository layout

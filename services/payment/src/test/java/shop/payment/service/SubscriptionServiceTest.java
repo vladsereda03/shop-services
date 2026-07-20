@@ -74,7 +74,7 @@ class SubscriptionServiceTest {
 
   // form-shape validation (periodicity pattern, required dates) lives on
   // SubscriptionForm as Bean Validation now and is exercised at the MVC edge
-  // by PaymentIntegrationTest.invalidSubscriptionFormIsRejectedWithProblemJson
+  // by PaymentIT.invalidSubscriptionFormIsRejectedWithProblemJson
 
   @Test
   void emptyCartIsRejectedWith400AndNothingIsSaved() {

@@ -52,7 +52,7 @@ import shop.payment.repository.SubscriptionRepository;
     })
 @AutoConfigureMockMvc
 @Testcontainers
-class PaymentIntegrationTest {
+class PaymentIT {
 
   private static final String PRIVATE_KEY = "test_private_key";
   private static final String CART_BASE_URL = "http://cart.local:8083";
