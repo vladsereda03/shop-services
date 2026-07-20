@@ -68,7 +68,7 @@ flowchart TB
 
 | Module | Port | Database | Responsibility |
 |---|---|---|---|
-| `services/auth` | 9000 | `authDB` | Authorization server (Spring Authorization Server): user registration, form login, OIDC provider, JWT issuing; publishes `user-registered` events to Kafka |
+| `services/auth` | 9000 | `authDB` | Authorization server (Spring Authorization Server): user registration, form login, OIDC provider, JWT issuing; publishes `user-registered` events to Kafka via a transactional outbox |
 | `services/client` | 8080 | — | BFF / web UI (Thymeleaf): OAuth2 client, renders catalog, cart, orders, payment and subscription pages; calls the APIs below with the user's token |
 | `services/product` | 8082 | `products` | Catalog: goods and manufacturers, stock reserve/release, admin-only good creation |
 | `services/cart` | 8083 | `carts` | Cart REST API with stock reservation; creates a cart for each new user via Kafka |
@@ -172,6 +172,21 @@ Design decisions and production-style bugs found and fixed along the way:
     callbacks lift that padlock with an empty `@SecurityRequirements` — the
     contract honestly shows them as signature-authenticated
     ([`PaymentController`](services/payment/src/main/java/shop/payment/controller/PaymentController.java)).
+11. **Reliable event publishing through a transactional outbox.** Registration used
+    to save the user and then fire the `user-registered` Kafka send as a separate
+    step — a textbook dual write: a broker outage or a crash between the two lost
+    the event, and the new user silently never got a cart. The event is now
+    inserted into an `outbox` table in the *same* transaction as the user row
+    ([`AccountService`](services/auth/src/main/java/shop/auth/service/AccountService.java);
+    the write uses `Propagation.MANDATORY`, so it can only ever commit alongside a
+    state change), and a scheduled
+    [`OutboxPublisher`](services/auth/src/main/java/shop/auth/service/OutboxPublisher.java)
+    relays unpublished rows to Kafka — claiming them with `FOR UPDATE SKIP LOCKED`
+    for safe multi-instance polling and stamping `published_at` only after the
+    broker ack. This closes the producer side and composes with the consumer-side
+    idempotency of highlight 3: the event can no longer be lost, and a duplicate on
+    retry is harmless because cart provisioning is idempotent — at-least-once, end
+    to end.
 
 ## Getting started
 
@@ -343,8 +358,10 @@ mvn test
 - **Integration tests** (require Docker): full Spring context against real
   PostgreSQL and Kafka started by [Testcontainers](https://testcontainers.com/),
   with the neighbour services stubbed at the HTTP level:
-  - `auth` — registration persists the user and the `user-registered` event
-    actually reaches the Kafka broker; token issuing and JWKS smoke tests.
+  - `auth` — registration persists the user and writes the `user-registered`
+    event to a transactional outbox, which the scheduled publisher relays to the
+    real Kafka broker and stamps published; an outbox write outside a transaction
+    is rejected. Plus token issuing and JWKS smoke tests.
   - `cart` — Kafka-driven cart provisioning, stock reservation with transaction
     rollback on conflict, resource-server security rules.
   - `order` — checkout turns the cart into an order and rolls back when the
@@ -377,12 +394,19 @@ default: daily/weekly/monthly/yearly at 15:00).
 ## Known limitations & roadmap
 
 - No distributed transactions between services: operation ordering minimizes the
-  damage window (local writes first, external calls last), but sagas with
-  compensation / a transactional outbox are future work.
+  damage window (local writes first, external calls last). The auth → cart
+  `user-registered` event is now delivered through a transactional outbox
+  (highlight 11), but the checkout and payment flows still rely on ordering
+  alone; sagas with compensation there are future work.
 - Callback deduplication is at-least-once at the edge: the processed
   `payment_id` row commits together with the downstream order call, so a crash
   after that call but before the commit would let a PSP retry create a
-  duplicate order — closing this window is the transactional-outbox item above.
+  duplicate order. The same outbox pattern (highlight 11) would close this window
+  on the payment side too; applying it there is future work.
+- The outbox intentionally decouples publishing from the request, so the signup
+  trace splits in two — the DB commit rides the request's trace while the Kafka
+  relay runs on the publisher's scheduled thread under its own. Carrying the
+  `traceparent` through the outbox row would rejoin them; left as a simplification.
 - Dev secrets (client secrets, DB passwords) are plain-text in configs — fine for
   a local demo, not for production.
 - Planned next: Kubernetes manifests, an API gateway.

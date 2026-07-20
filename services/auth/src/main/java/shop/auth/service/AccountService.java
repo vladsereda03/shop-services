@@ -1,14 +1,10 @@
 package shop.auth.service;
 
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.SendResult;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import shop.auth.model.Role;
 import shop.auth.model.User;
 import shop.auth.model.dto.UserDTO;
@@ -22,8 +18,7 @@ public class AccountService {
 
   private final UserRepository userRepository;
   private final PasswordEncoder passwordEncoder;
-  private final KafkaTemplate<String, UserRegisteredEvent> kafkaTemplate;
-  private static final Logger logger = LoggerFactory.getLogger(AccountService.class);
+  private final OutboxService outboxService;
 
   private static final String USERNAME_PATTERN = "^[a-zA-Z][a-zA-Z0-9_]*$";
   private static final String EMAIL_PATTERN = "^[\\w-.]+@[\\w-]+(\\.[\\w-]+)*\\.[a-z]{2,}$";
@@ -39,6 +34,7 @@ public class AccountService {
   public static final String INVALID_EMAIL = "Invalid email";
   public static final String INVALID_PHONE = "Invalid phone";
 
+  @Transactional
   public User createAndSaveUser(UserDTO dto) throws RegistrationException {
     validateForRegistration(dto);
 
@@ -54,24 +50,12 @@ public class AccountService {
 
     user = userRepository.saveAndFlush(user);
 
-    // todo: logic to write UserRegisteredEvent
-
-    var userRegisteredEvent = new UserRegisteredEvent(user.getId(), user.getUsername());
-
-    CompletableFuture<SendResult<String, UserRegisteredEvent>> completableFuture =
-        kafkaTemplate.send(
-            "user-registered-events-topic",
-            String.valueOf(userRegisteredEvent.getUserId()),
-            userRegisteredEvent);
-
-    completableFuture.whenComplete(
-        (result, exception) -> {
-          if (exception != null) {
-            logger.error("Failed to send message: {}", exception.getMessage());
-          } else {
-            logger.info("Message sent successfully {}", result.getRecordMetadata());
-          }
-        });
+    // the event lands in the outbox within this same transaction: it reaches Kafka only if (and
+    // after) the user row commits, closing the dual-write gap between the DB and the broker
+    outboxService.record(
+        "user-registered-events-topic",
+        String.valueOf(user.getId()),
+        new UserRegisteredEvent(user.getId(), user.getUsername()));
 
     return user;
   }

@@ -1,6 +1,8 @@
 package shop.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -35,13 +37,17 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.IllegalTransactionStateException;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.KafkaContainer;
+import shop.auth.model.OutboxEvent;
 import shop.auth.model.Role;
 import shop.auth.model.User;
+import shop.auth.repository.OutboxEventRepository;
 import shop.auth.repository.UserRepository;
+import shop.auth.service.OutboxService;
 import shop.event.UserRegisteredEvent;
 
 // full-context integration test of the authorization server: real PostgreSQL and Kafka
@@ -79,15 +85,20 @@ class AuthIntegrationTest {
 
   @Autowired private UserRepository userRepository;
 
+  @Autowired private OutboxEventRepository outboxEventRepository;
+
+  @Autowired private OutboxService outboxService;
+
   @BeforeEach
   void cleanUp() {
     userRepository.deleteAll();
+    outboxEventRepository.deleteAll();
   }
 
-  // --- registration → DB + Kafka event ---
+  // --- registration → DB + outbox → Kafka event ---
 
   @Test
-  void signupPersistsUserAndPublishesEventToKafka() throws Exception {
+  void signupPersistsUserWritesOutboxAndPublisherRelaysEventToKafka() throws Exception {
     mockMvc
         .perform(
             post("/account/signup")
@@ -112,6 +123,37 @@ class AuthIntegrationTest {
       assertThat(record.value().getUserId()).isEqualTo(saved.getId());
       assertThat(record.value().getUsername()).isEqualTo("integration_user");
     }
+
+    // the event was relayed from the outbox (written in the signup transaction), and the
+    // publisher stamps the row published after the broker ack — await that async commit.
+    // published_at being set is exactly what stops the row from being sent a second time.
+    await()
+        .atMost(Duration.ofSeconds(15))
+        .untilAsserted(
+            () -> {
+              List<OutboxEvent> rows = outboxEventRepository.findAll();
+              assertThat(rows).hasSize(1);
+              OutboxEvent row = rows.get(0);
+              assertThat(row.getAggregateId()).isEqualTo(String.valueOf(saved.getId()));
+              assertThat(row.getEventType()).isEqualTo("UserRegisteredEvent");
+              assertThat(row.getTopic()).isEqualTo(USER_REGISTERED_TOPIC);
+              assertThat(row.getPayload()).contains("integration_user");
+              assertThat(row.getCreatedAt()).isNotNull();
+              assertThat(row.getPublishedAt()).isNotNull();
+            });
+  }
+
+  @Test
+  void outboxWriteOutsideATransactionIsRejected() {
+    // MANDATORY propagation: recording an event outside a business transaction is a bug and must
+    // fail loudly. This guarantees the event can only ever be committed atomically with a state
+    // change — never on its own — which is what closes the dual-write gap.
+    assertThatThrownBy(
+            () ->
+                outboxService.record(
+                    USER_REGISTERED_TOPIC, "1", new UserRegisteredEvent(1L, "ghost")))
+        .isInstanceOf(IllegalTransactionStateException.class);
+    assertThat(outboxEventRepository.count()).isZero();
   }
 
   @Test
