@@ -251,7 +251,9 @@ class PaymentIT {
   void duplicatePaymentCallbackCreatesOnlyOneOrder() throws Exception {
     // exactly one checkout expectation: a second call would fail the mock server
     shopServer
-        .expect(requestTo(ORDER_BASE_URL + "/internal/orders/" + USER_ID + "/checkout"))
+        .expect(
+            requestTo(
+                ORDER_BASE_URL + "/internal/orders/" + USER_ID + "/checkout?paymentId=900000001"))
         .andExpect(method(HttpMethod.POST))
         .andRespond(withSuccess());
     String data =
@@ -279,7 +281,7 @@ class PaymentIT {
         subscriptionRepository.saveAndFlush(
             subscriptionOf("month", LocalDateTime.now().minusDays(1)));
     shopServer
-        .expect(requestTo(ORDER_BASE_URL + "/internal/orders/" + USER_ID))
+        .expect(requestTo(ORDER_BASE_URL + "/internal/orders/" + USER_ID + "?paymentId=900000002"))
         .andExpect(method(HttpMethod.POST))
         .andRespond(withSuccess());
     String data =

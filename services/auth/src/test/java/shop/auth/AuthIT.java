@@ -24,8 +24,10 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -47,15 +49,23 @@ import shop.auth.model.Role;
 import shop.auth.model.User;
 import shop.auth.repository.OutboxEventRepository;
 import shop.auth.repository.UserRepository;
+import shop.auth.service.OutboxPublisher;
 import shop.auth.service.OutboxService;
 import shop.event.UserRegisteredEvent;
 
 // full-context integration test of the authorization server: real PostgreSQL and Kafka
 // in containers. Covers the producer side of the user-registered flow (cart tests the
 // consumer side) and smoke-tests token issuing
-@SpringBootTest
+@SpringBootTest(
+    properties = {
+      // single-broker test Kafka: create the topic at RF=1 so startup does not log an
+      // InvalidReplicationFactorException (production keeps the 3-broker defaults)
+      "app.kafka.topic.user-registered.replicas=1",
+      "app.kafka.topic.user-registered.min-insync-replicas=1"
+    })
 @AutoConfigureMockMvc
 @Testcontainers
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class AuthIT {
 
   private static final String USER_REGISTERED_TOPIC = "user-registered-events-topic";
@@ -89,10 +99,19 @@ class AuthIT {
 
   @Autowired private OutboxService outboxService;
 
+  @Autowired private OutboxPublisher outboxPublisher;
+
   @BeforeEach
   void cleanUp() {
     userRepository.deleteAll();
     outboxEventRepository.deleteAll();
+  }
+
+  // stop the scheduled outbox poll before Testcontainers tears down PostgreSQL, so a poll firing
+  // during teardown never blocks on a stopped database (@AfterAll runs before the container stops)
+  @AfterAll
+  void stopOutboxPoller() {
+    outboxPublisher.stop();
   }
 
   // --- registration → DB + outbox → Kafka event ---

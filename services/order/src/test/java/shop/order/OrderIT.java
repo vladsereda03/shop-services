@@ -177,6 +177,42 @@ class OrderIT {
     assertThat(orders.getFirst().getItems().get(5L).getQuantity()).isEqualTo(2);
   }
 
+  @Test
+  void duplicateCheckoutWithSamePaymentIdCreatesOnlyOneOrder() throws Exception {
+    // the first callback pulls the cart and clears it — exactly one GET + one clear are expected,
+    // so the replay below (which must touch neither) would fail the mock server if it did
+    cartServer
+        .expect(requestTo(CART_BASE_URL + "/internal/carts/" + USER_ID))
+        .andExpect(method(HttpMethod.GET))
+        .andRespond(withSuccess(CART_WITH_TWO_ITEMS, MediaType.APPLICATION_JSON));
+    cartServer
+        .expect(requestTo(CART_BASE_URL + "/internal/carts/" + USER_ID + "/checkout-clear"))
+        .andExpect(method(HttpMethod.POST))
+        .andRespond(withSuccess());
+
+    var writeJwt = jwt().authorities(new SimpleGrantedAuthority("SCOPE_orders.write"));
+
+    mockMvc
+        .perform(
+            post("/internal/orders/" + USER_ID + "/checkout")
+                .param("paymentId", "700001")
+                .with(writeJwt))
+        .andExpect(status().isOk());
+    // the redelivered callback carries the same payment_id: it resolves to the order already
+    // created instead of a second one, and never re-pulls the (now empty) cart
+    mockMvc
+        .perform(
+            post("/internal/orders/" + USER_ID + "/checkout")
+                .param("paymentId", "700001")
+                .with(writeJwt))
+        .andExpect(status().isOk());
+
+    cartServer.verify();
+    List<Order> orders = orderRepository.findAllByUserIdOrderByCreatedAtDesc(USER_ID);
+    assertThat(orders).hasSize(1);
+    assertThat(orders.getFirst().getPaymentId()).isEqualTo(700001L);
+  }
+
   // --- helpers ---
 
   private static Order orderOf(long userId, Instant createdAt) {

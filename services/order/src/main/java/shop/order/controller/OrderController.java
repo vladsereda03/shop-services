@@ -25,10 +25,11 @@ public class OrderController {
     return orderService.getMyOrders(currentUserId(jwt)).stream().map(OrderDTO::from).toList();
   }
 
-  // checkout: turn the current cart into an order and clear the cart
+  // checkout: turn the current cart into an order and clear the cart. The demo (no-payment) path
+  // carries no idempotency key — each manual checkout is a distinct order.
   @PostMapping("/my")
   public OrderDTO checkout(@AuthenticationPrincipal Jwt jwt) {
-    return OrderDTO.from(orderService.checkout(currentUserId(jwt)));
+    return OrderDTO.from(orderService.checkout(currentUserId(jwt), null));
   }
 
   private Long currentUserId(Jwt jwt) {

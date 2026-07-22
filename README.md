@@ -119,10 +119,14 @@ Design decisions and production-style bugs found and fixed along the way:
    [`PaymentCallbackService`](services/payment/src/main/java/shop/payment/service/PaymentCallbackService.java)
    verifies the `base64(sha1(private_key + data + private_key))` signature before
    trusting a byte (mismatch → 403, covered by unit tests). Callbacks are
-   deduplicated by LiqPay's `payment_id`: a guard row is inserted into
-   `processed_callback` *before* the downstream call, so even a concurrent
+   deduplicated by LiqPay's `payment_id` at two independent layers: a guard row is
+   inserted into `processed_callback` *before* the downstream call, so a concurrent
    duplicate blocks on the primary key and fails before it can create a second
-   order; replays are answered `200` so the PSP stops retrying.
+   order; and order-service enforces the same key with a `UNIQUE (payment_id)` on
+   `orders`, so even if that guard row is lost to a crash before it commits, the
+   redelivered callback resolves to the order already created — never a duplicate
+   ([`OrderService`](services/order/src/main/java/shop/order/service/OrderService.java)).
+   Replays are answered `200` so the PSP stops retrying.
 4. **No distributed transactions — deliberate operation ordering instead.**
    Local writes commit first, external calls go last, failures roll the local
    state back: checkout rolls the order back when the cart cannot be cleared
@@ -181,12 +185,16 @@ Design decisions and production-style bugs found and fixed along the way:
     the write uses `Propagation.MANDATORY`, so it can only ever commit alongside a
     state change), and a scheduled
     [`OutboxPublisher`](services/auth/src/main/java/shop/auth/service/OutboxPublisher.java)
-    relays unpublished rows to Kafka — claiming them with `FOR UPDATE SKIP LOCKED`
-    for safe multi-instance polling and stamping `published_at` only after the
-    broker ack. This closes the producer side and composes with the consumer-side
+    (a `SmartLifecycle`, so polling stops cleanly on shutdown) drives an
+    [`OutboxRelay`](services/auth/src/main/java/shop/auth/service/OutboxRelay.java)
+    that claims rows with `FOR UPDATE SKIP LOCKED` for safe multi-instance polling
+    and stamps `published_at` only after the broker ack. This closes the producer side and composes with the consumer-side
     idempotency of highlight 3: the event can no longer be lost, and a duplicate on
     retry is harmless because cart provisioning is idempotent — at-least-once, end
-    to end.
+    to end. The recording request's trace is snapshotted into the outbox row (via
+    the Micrometer `Propagator`) and resumed when the relay publishes, so the
+    asynchronous hop still shows up as one continuous signup trace in Zipkin
+    instead of splitting at the outbox boundary.
 
 ## Getting started
 
@@ -411,15 +419,6 @@ default: daily/weekly/monthly/yearly at 15:00).
   `user-registered` event is now delivered through a transactional outbox
   (highlight 11), but the checkout and payment flows still rely on ordering
   alone; sagas with compensation there are future work.
-- Callback deduplication is at-least-once at the edge: the processed
-  `payment_id` row commits together with the downstream order call, so a crash
-  after that call but before the commit would let a PSP retry create a
-  duplicate order. The same outbox pattern (highlight 11) would close this window
-  on the payment side too; applying it there is future work.
-- The outbox intentionally decouples publishing from the request, so the signup
-  trace splits in two — the DB commit rides the request's trace while the Kafka
-  relay runs on the publisher's scheduled thread under its own. Carrying the
-  `traceparent` through the outbox row would rejoin them; left as a simplification.
 - Secrets come from the environment — DB credentials, the JWT signing keys, LiqPay
   keys and the OAuth2 client secrets — with dev defaults baked in for a one-command
   local run and overridable in production. The committed dev defaults are demo

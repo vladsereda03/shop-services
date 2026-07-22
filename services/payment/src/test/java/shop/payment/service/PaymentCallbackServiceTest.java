@@ -157,7 +157,7 @@ class PaymentCallbackServiceTest {
   @Test
   void firstPaymentIdIsRecordedBeforeCheckout() {
     orderServer
-        .expect(requestTo(ORDER_BASE_URL + "/internal/orders/42/checkout"))
+        .expect(requestTo(ORDER_BASE_URL + "/internal/orders/42/checkout?paymentId=555"))
         .andExpect(method(HttpMethod.POST))
         .andRespond(withSuccess());
     when(processedCallbackRepository.existsById(555L)).thenReturn(false);
@@ -232,7 +232,8 @@ class PaymentCallbackServiceTest {
 
     callbackService.processSubscriptionCallback(data, sign(data));
 
-    verify(subscriptionService).createOrderFromSubscription(subscription);
+    // no payment_id in this payload → the idempotency key passed downstream is null
+    verify(subscriptionService).createOrderFromSubscription(subscription, null);
   }
 
   // --- helpers ---

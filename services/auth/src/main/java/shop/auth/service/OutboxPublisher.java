@@ -1,59 +1,55 @@
 package shop.auth.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.context.SmartLifecycle;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import shop.auth.model.OutboxEvent;
-import shop.auth.repository.OutboxEventRepository;
-import shop.event.UserRegisteredEvent;
 
-// relays outbox rows to Kafka on a fixed schedule. Publishing after the DB commit (not during the
+// drives the outbox relay on a fixed schedule. Publishing after the DB commit (not during the
 // request) is what makes delivery reliable: a committed row is retried until the broker
 // acknowledges it. Duplicates on retry are safe — the cart consumer is idempotent.
+//
+// SmartLifecycle so polling can be stopped cleanly: Spring calls stop() while the context shuts
+// down (before the datasource closes), and the integration test calls it before tearing down its
+// database container — either way a poll can no longer fire against a dead connection and hang.
 @Service
 @RequiredArgsConstructor
-public class OutboxPublisher {
+public class OutboxPublisher implements SmartLifecycle {
 
   private static final Logger logger = LoggerFactory.getLogger(OutboxPublisher.class);
 
-  private static final int BATCH_SIZE = 100;
-  private static final long SEND_TIMEOUT_SECONDS = 10;
+  private final OutboxRelay outboxRelay;
 
-  private final OutboxEventRepository outboxEventRepository;
-  private final KafkaTemplate<String, UserRegisteredEvent> kafkaTemplate;
-  private final ObjectMapper objectMapper;
+  private volatile boolean running = false;
 
-  // the FOR UPDATE lock and the published_at update must share one transaction, so this method is
-  // @Transactional. The scheduler invokes it through the transactional proxy, so the advice
-  // applies.
+  @Override
+  public void start() {
+    running = true;
+  }
+
+  @Override
+  public void stop() {
+    running = false;
+  }
+
+  @Override
+  public boolean isRunning() {
+    return running;
+  }
+
   @Scheduled(fixedDelayString = "${outbox.poll-delay-ms:1000}")
-  @Transactional
   public void publishPendingEvents() {
-    List<OutboxEvent> batch = outboxEventRepository.lockUnpublishedBatch(BATCH_SIZE);
-    for (OutboxEvent event : batch) {
-      try {
-        UserRegisteredEvent payload =
-            objectMapper.readValue(event.getPayload(), UserRegisteredEvent.class);
-        // block for the broker ack: only a confirmed send may stamp published_at
-        kafkaTemplate
-            .send(event.getTopic(), event.getAggregateId(), payload)
-            .get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        event.markPublished();
-      } catch (Exception e) {
-        // one unsendable row must not roll back rows already sent in this batch: leave it
-        // unpublished and let the next cycle retry it (at-least-once delivery)
-        if (e instanceof InterruptedException) {
-          Thread.currentThread().interrupt();
-        }
-        logger.error("Failed to publish outbox event {}, will retry", event.getId(), e);
-      }
+    if (!running) {
+      return;
+    }
+    try {
+      outboxRelay.relayPendingEvents();
+    } catch (Exception e) {
+      // a failed poll (e.g. the DB briefly unreachable) must not reach the scheduler's error
+      // handler as an ERROR with a stack trace; the next cycle retries
+      logger.warn("Outbox relay cycle failed, will retry next cycle: {}", e.getMessage());
     }
   }
 }

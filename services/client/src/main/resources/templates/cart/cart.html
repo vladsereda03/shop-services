@@ -26,12 +26,25 @@
         </div>
     </div>
 
-    <div class="actions">
-        <a class="btn btn-secondary" th:href="@{/cart/clear}">Очистити кошик</a>
-        <a class="btn btn-primary" th:href="@{/orders/checkout}">Оформити замовлення</a>
-        <a class="btn btn-secondary" th:href="@{/subscription/new}">Регулярна підписка</a>
-        <!-- платіжна форма LiqPay (HTML генерує payment-сервіс) -->
-        <div class="liqpay-form" th:if="${liqpayForm}" th:utext="${liqpayForm}"></div>
+    <div class="checkout" th:unless="${#lists.isEmpty(items)}">
+        <!-- основний шлях: оплата карткою через LiqPay (HTML форми генерує payment-сервіс) -->
+        <section class="checkout-option" th:if="${liqpayForm}">
+            <h2 class="checkout-title">Оплата карткою</h2>
+            <p class="checkout-hint">Оплата через LiqPay.</p>
+            <div class="liqpay-form" th:utext="${liqpayForm}"></div>
+        </section>
+
+        <!-- альтернатива: демо-оформлення без реальної оплати -->
+        <section class="checkout-option">
+            <h2 class="checkout-title">Без оплати</h2>
+            <p class="checkout-hint">Демо-режим: замовлення створюється одразу, без реальної оплати.</p>
+            <a class="btn btn-primary btn-block" th:href="@{/orders/checkout}">Оформити без оплати</a>
+        </section>
+
+        <div class="checkout-footer">
+            <a class="btn btn-secondary" th:href="@{/subscription/new}">Регулярна підписка</a>
+            <a class="btn btn-secondary" th:href="@{/cart/clear}">Очистити кошик</a>
+        </div>
     </div>
 </main>
 

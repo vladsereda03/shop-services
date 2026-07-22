@@ -27,6 +27,12 @@ public class Order {
   @Column(nullable = false)
   private Instant createdAt;
 
+  // idempotency key: the LiqPay payment_id this order was created from, or null for recurring
+  // charges emulated by the payment scheduler. A unique constraint (see V2 migration) makes a
+  // redelivered one-time callback a no-op instead of a duplicate order.
+  @Column(name = "payment_id", unique = true)
+  private Long paymentId;
+
   // snapshot of the cart at checkout time: goodId -> (quantity, price)
   @Builder.Default
   @ElementCollection(fetch = FetchType.EAGER)

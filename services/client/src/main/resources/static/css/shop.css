@@ -474,6 +474,39 @@ a:hover {
     display: inline-block;
 }
 
+/* Cart checkout options: card payment vs the no-payment demo path, kept visually distinct */
+.checkout {
+    display: grid;
+    gap: 16px;
+    margin-top: 20px;
+}
+
+.checkout-option {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 18px 20px;
+}
+
+.checkout-title {
+    margin: 0 0 4px;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.checkout-hint {
+    color: var(--text-muted);
+    font-size: 14px;
+    margin: 0 0 14px;
+}
+
+.checkout-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
 /* Orders */
 
 .order-card {

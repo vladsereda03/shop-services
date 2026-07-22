@@ -60,13 +60,17 @@ public class PaymentCallbackService {
     }
 
     long userId = Long.parseLong(payload.getString("info"));
+    long paymentId = payload.optLong("payment_id", -1);
 
-    if (alreadyProcessed(payload)) {
+    if (alreadyProcessed(paymentId)) {
       return;
     }
 
     try {
-      orderClient.checkout(userId);
+      // the payment_id also travels to order-service as the idempotency key, so a callback
+      // redelivered after this transaction committed but before the processed-callback row did
+      // still resolves to the same order instead of a duplicate
+      orderClient.checkout(userId, paymentId > 0 ? paymentId : null);
       logger.info("LiqPay payment {} confirmed: order created for user {}", orderId, userId);
     } catch (HttpClientErrorException.BadRequest e) {
       // cart is already empty — most likely a duplicate callback; answer 200 so LiqPay stops
@@ -113,19 +117,19 @@ public class PaymentCallbackService {
       return;
     }
 
-    if (alreadyProcessed(payload)) {
+    long paymentId = payload.optLong("payment_id", -1);
+    if (alreadyProcessed(paymentId)) {
       return;
     }
 
-    subscriptionService.createOrderFromSubscription(subscription);
+    subscriptionService.createOrderFromSubscription(subscription, paymentId > 0 ? paymentId : null);
     logger.info("LiqPay recurring payment confirmed for subscription {}", subscriptionId);
   }
 
   // deduplication by LiqPay's payment_id (unique per charge). Insert-FIRST, before the
   // downstream call: a concurrent duplicate blocks on the primary key at flush and fails
   // before it can produce a second order, so the effect runs at most once per payment_id
-  private boolean alreadyProcessed(JSONObject payload) {
-    long paymentId = payload.optLong("payment_id", -1);
+  private boolean alreadyProcessed(long paymentId) {
     if (paymentId <= 0) {
       logger.warn("LiqPay callback carries no payment_id — processed without deduplication");
       return false;

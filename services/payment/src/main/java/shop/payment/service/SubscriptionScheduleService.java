@@ -50,7 +50,8 @@ public class SubscriptionScheduleService {
 
     for (Subscription subscription : due) {
       try {
-        subscriptionService.createOrderFromSubscription(subscription);
+        // no LiqPay payment_id in emulation mode — each scheduled charge is a distinct order
+        subscriptionService.createOrderFromSubscription(subscription, null);
       } catch (Exception e) {
         // one broken subscription must not stop the rest of the run
         logger.error("Recurring order failed for subscription {}", subscription.getId(), e);

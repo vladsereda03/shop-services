@@ -2,7 +2,12 @@ package shop.auth.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.tracing.TraceContext;
+import io.micrometer.tracing.Tracer;
+import io.micrometer.tracing.propagation.Propagator;
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -19,6 +24,8 @@ public class OutboxService {
 
   private final OutboxEventRepository outboxEventRepository;
   private final ObjectMapper objectMapper;
+  private final Tracer tracer;
+  private final Propagator propagator;
 
   @Transactional(propagation = Propagation.MANDATORY)
   public void record(String topic, String key, Object event) {
@@ -28,17 +35,30 @@ public class OutboxService {
             .eventType(event.getClass().getSimpleName())
             .topic(topic)
             .payload(serialize(event))
+            .traceContext(captureTraceContext())
             .createdAt(Instant.now())
             .build();
     outboxEventRepository.save(outboxEvent);
   }
 
-  private String serialize(Object event) {
+  // snapshot the current trace as propagation headers so the async relay can rejoin it; null when
+  // the caller runs outside any trace
+  private String captureTraceContext() {
+    TraceContext context = tracer.currentTraceContext().context();
+    if (context == null) {
+      return null;
+    }
+    Map<String, String> carrier = new HashMap<>();
+    propagator.inject(context, carrier, Map::put);
+    return serialize(carrier);
+  }
+
+  private String serialize(Object value) {
     try {
-      return objectMapper.writeValueAsString(event);
+      return objectMapper.writeValueAsString(value);
     } catch (JsonProcessingException e) {
-      // a domain event that cannot be serialized is a programming error, not a runtime condition
-      throw new IllegalStateException("Cannot serialize outbox event " + event.getClass(), e);
+      // an event or trace context that cannot be serialized is a programming error, not runtime
+      throw new IllegalStateException("Cannot serialize outbox value " + value.getClass(), e);
     }
   }
 }

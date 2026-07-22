@@ -108,9 +108,10 @@ public class SubscriptionService {
     return subscriptionRepository.findAllByUserIdOrderByIdDesc(userId);
   }
 
-  // a confirmed recurring charge turns the stored snapshot into an order;
-  // called by the LiqPay callback and by the local schedule emulator
-  public void createOrderFromSubscription(Subscription subscription) {
+  // a confirmed recurring charge turns the stored snapshot into an order; called by the LiqPay
+  // callback (with the charge's payment_id as the idempotency key) and by the local schedule
+  // emulator (paymentId null — the scheduler has no LiqPay charge to key on)
+  public void createOrderFromSubscription(Subscription subscription, Long paymentId) {
     List<OrderItemDTO> items =
         subscription.getItems().entrySet().stream()
             .map(
@@ -121,7 +122,7 @@ public class SubscriptionService {
                         entry.getValue().getPriceKopeck()))
             .toList();
 
-    orderClient.createOrder(subscription.getUserId(), items);
+    orderClient.createOrder(subscription.getUserId(), items, paymentId);
 
     logger.info(
         "Recurring order created from subscription {} for user {}",

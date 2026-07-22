@@ -41,6 +41,11 @@ public class OutboxEvent {
   // null until the broker has acknowledged the send; the poll predicate keys off this column
   private Instant publishedAt;
 
+  // propagation headers (as a JSON map) of the trace that recorded this event, so the async relay
+  // can continue the same trace when it publishes. Null when recorded outside a trace.
+  @Column(columnDefinition = "TEXT")
+  private String traceContext;
+
   public void markPublished() {
     this.publishedAt = Instant.now();
   }

@@ -171,7 +171,7 @@ class SubscriptionServiceTest {
             .items(Map.of(5L, new Subscription.SubscriptionItem(2, 1500L)))
             .build();
 
-    subscriptionService.createOrderFromSubscription(subscription);
+    subscriptionService.createOrderFromSubscription(subscription, null);
 
     server.verify();
   }
