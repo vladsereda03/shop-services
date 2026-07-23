@@ -79,7 +79,7 @@ jobs:
           cache-to: type=gha,scope=${{ matrix.module }},mode=max
 
       - name: Trivy scan (report)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: ghcr.io/${{ github.repository }}/${{ matrix.module }}:${{ steps.meta.outputs.version }}
@@ -99,7 +99,7 @@ jobs:
         # HIGH and unfixed CRITICALs are reported above but do not break the
         # build: a fresh base-image CVE without a released fix would otherwise
         # turn CI red with no code change to make
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: ghcr.io/${{ github.repository }}/${{ matrix.module }}:${{ steps.meta.outputs.version }}
