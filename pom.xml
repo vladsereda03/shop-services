@@ -20,7 +20,7 @@
     <artifactId>spring-boot-starter-parent</artifactId>
     <!-- stay on the newest 3.5.x patch: the CI Trivy gate fails on fixable
          CRITICALs, and dependency CVE fixes arrive through this version -->
-    <version>3.5.16</version>
+    <version>4.1.0</version>
     <relativePath/>
   </parent>
   <packaging>pom</packaging>
