@@ -10,20 +10,20 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import shop.auth.model.User;
 import shop.auth.model.dto.UserDTO;
-import shop.auth.repository.UserRepository;
+import shop.auth.service.AccountService;
 
 @RestController
 @RequiredArgsConstructor
 public class OIDController {
 
-  private final UserRepository userRepository;
+  private final AccountService accountService;
 
   @GetMapping("/connect/userinfo")
   @JsonView(UserDTO.InternalView.class)
   public UserDTO userInfo(@AuthenticationPrincipal Jwt jwt) {
 
     User user =
-        userRepository
+        accountService
             .findByUsername(jwt.getSubject())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
 

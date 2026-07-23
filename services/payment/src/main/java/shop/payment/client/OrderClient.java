@@ -4,7 +4,6 @@ import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import java.util.List;
 import java.util.Optional;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -17,13 +16,16 @@ import shop.payment.model.dto.OrderItemDTO;
 // proxies and would be silently bypassed on self-invocation inside the services.
 // deliberately NO @Retry anywhere here: creating orders is not idempotent
 @Component
-@RequiredArgsConstructor
 public class OrderClient {
 
   private final RestClient restClient;
+  private final String orderBaseUrl;
 
-  @Value("${services.order.base-url}")
-  private String orderBaseUrl;
+  public OrderClient(
+      RestClient restClient, @Value("${services.order.base-url}") String orderBaseUrl) {
+    this.restClient = restClient;
+    this.orderBaseUrl = orderBaseUrl;
+  }
 
   @CircuitBreaker(name = "order", fallbackMethod = "checkoutUnavailable")
   public void checkout(Long userId, Long paymentId) {

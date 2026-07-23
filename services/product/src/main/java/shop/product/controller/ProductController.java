@@ -1,6 +1,5 @@
 package shop.product.controller;
 
-import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -14,7 +13,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import shop.product.model.dto.CreateGoodRequest;
 import shop.product.model.dto.GoodDTO;
-import shop.product.repository.GoodRepository;
 import shop.product.service.ProductService;
 
 @RestController
@@ -22,25 +20,18 @@ import shop.product.service.ProductService;
 @RequestMapping("/api/products")
 public class ProductController {
 
-  private final GoodRepository goodRepository;
   private final ProductService productService;
 
   @GetMapping()
   public List<GoodDTO> getAll() {
 
-    return goodRepository.findAll().stream().map(GoodDTO::new).collect(Collectors.toList());
+    return productService.getAll().stream().map(GoodDTO::new).collect(Collectors.toList());
   }
 
   @GetMapping("/{id}")
   public GoodDTO getById(@PathVariable("id") long id) {
 
-    GoodDTO goodDTO =
-        goodRepository
-            .findById(id)
-            .map(GoodDTO::new)
-            .orElseThrow(() -> new EntityNotFoundException("Good with id " + id + " not found"));
-
-    return goodDTO;
+    return new GoodDTO(productService.getById(id));
   }
 
   // catalog management: requires the ADMIN role (see SecurityConfig)

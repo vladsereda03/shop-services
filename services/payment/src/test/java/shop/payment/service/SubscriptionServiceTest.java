@@ -28,7 +28,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClient;
@@ -58,10 +57,8 @@ class SubscriptionServiceTest {
     server = MockRestServiceServer.bindTo(restClientBuilder).build();
     // bare clients: without Spring AOP their resilience annotations are inert,
     // so the unit tests exercise pure subscription logic
-    CartClient cartClient = new CartClient(restClientBuilder.build());
-    ReflectionTestUtils.setField(cartClient, "cartBaseUrl", CART_BASE_URL);
-    OrderClient orderClient = new OrderClient(restClientBuilder.build());
-    ReflectionTestUtils.setField(orderClient, "orderBaseUrl", ORDER_BASE_URL);
+    CartClient cartClient = new CartClient(restClientBuilder.build(), CART_BASE_URL);
+    OrderClient orderClient = new OrderClient(restClientBuilder.build(), ORDER_BASE_URL);
     // registerInLiqPay=false — the sandbox has no subscriptions, charges are emulated by the
     // scheduler
     subscriptionService =

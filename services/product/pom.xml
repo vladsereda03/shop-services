@@ -92,6 +92,12 @@
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <!-- build-time architecture rules, see ArchitectureTest -->
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit</artifactId>
+            <scope>test</scope>
+        </dependency>
 
         <!-- integration tests: real PostgreSQL in a container -->
         <dependency>

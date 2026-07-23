@@ -26,7 +26,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClient;
@@ -59,8 +58,7 @@ class PaymentCallbackServiceTest {
     orderServer = MockRestServiceServer.bindTo(restClientBuilder).build();
     // a bare OrderClient: without Spring AOP its resilience annotations are inert,
     // so the unit tests exercise pure callback logic
-    OrderClient orderClient = new OrderClient(restClientBuilder.build());
-    ReflectionTestUtils.setField(orderClient, "orderBaseUrl", ORDER_BASE_URL);
+    OrderClient orderClient = new OrderClient(restClientBuilder.build(), ORDER_BASE_URL);
     callbackService =
         new PaymentCallbackService(
             new LiqPayProperties("test_public_key", PRIVATE_KEY),

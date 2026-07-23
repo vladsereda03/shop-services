@@ -2,12 +2,14 @@ package shop.product.service;
 
 import jakarta.persistence.EntityNotFoundException;
 import java.util.Base64;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import shop.product.model.Good;
+import shop.product.model.Manufacturer;
 import shop.product.model.dto.CreateGoodRequest;
 import shop.product.repository.GoodRepository;
 import shop.product.repository.ManufacturerRepository;
@@ -18,6 +20,23 @@ public class ProductService {
 
   private final GoodRepository goodRepository;
   private final ManufacturerRepository manufacturerRepository;
+
+  @Transactional(readOnly = true)
+  public List<Good> getAll() {
+    return goodRepository.findAll();
+  }
+
+  @Transactional(readOnly = true)
+  public Good getById(long id) {
+    return goodRepository
+        .findById(id)
+        .orElseThrow(() -> new EntityNotFoundException("Good with id " + id + " not found"));
+  }
+
+  @Transactional(readOnly = true)
+  public List<Manufacturer> getAllManufacturers() {
+    return manufacturerRepository.findAll();
+  }
 
   @Transactional
   public void reserve(long goodId, int quantity) {

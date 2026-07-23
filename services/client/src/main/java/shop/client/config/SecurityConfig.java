@@ -3,6 +3,7 @@ package shop.client.config;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,6 +27,7 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
 
+@Slf4j
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
@@ -57,7 +59,7 @@ public class SecurityConfig {
                         userInfo -> userInfo.userAuthoritiesMapper(userAuthoritiesMapper()))
                     .failureHandler(
                         (request, response, exception) -> {
-                          exception.printStackTrace();
+                          log.warn("OAuth2 login failed", exception);
                           response.sendRedirect("/login?error");
                         }))
         .logout(

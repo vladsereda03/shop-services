@@ -3,7 +3,6 @@ package shop.order.client;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -14,13 +13,15 @@ import shop.order.model.dto.CartDTO;
 // the HTTP edge to cart-service in its own bean: resilience annotations are AOP
 // proxies and would be silently bypassed on self-invocation inside OrderService
 @Component
-@RequiredArgsConstructor
 public class CartClient {
 
   private final RestClient restClient;
+  private final String cartBaseUrl;
 
-  @Value("${services.cart.base-url}")
-  private String cartBaseUrl;
+  public CartClient(RestClient restClient, @Value("${services.cart.base-url}") String cartBaseUrl) {
+    this.restClient = restClient;
+    this.cartBaseUrl = cartBaseUrl;
+  }
 
   // GET is idempotent — safe to retry on transient failures
   @CircuitBreaker(name = "cart", fallbackMethod = "getCartUnavailable")

@@ -1,0 +1,39 @@
+# Dependabot: automated dependency update PRs.
+# Maven covers the whole reactor (the file fetcher follows <modules> from the
+# root pom), so one entry watches the parent, the BOM imports and every module.
+version: 2
+updates:
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "Europe/Kyiv"
+    open-pull-requests-limit: 10
+    groups:
+      # One weekly PR for all minor+patch bumps; majors (e.g. Boot 4) stay
+      # individual PRs so they get a deliberate review.
+      maven-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "Europe/Kyiv"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Base images of the root Dockerfile (build + runtime stages).
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "Europe/Kyiv"

@@ -47,24 +47,23 @@ import org.springframework.security.web.authentication.LoginUrlAuthenticationEnt
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 import shop.auth.model.User;
-import shop.auth.repository.UserRepository;
+import shop.auth.service.AccountService;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
-  private final UserRepository userRepository;
-
   private final String JWK_KEY_ID;
   private final String JWT_PUBLIC_KEY;
   private final String JWT_PRIVATE_KEY;
 
+  // domain lookups (AccountService) are injected into the @Bean methods that need
+  // them, not into this constructor: AccountService itself depends on the
+  // passwordEncoder bean defined below, so a constructor dependency would be a cycle
   public SecurityConfig(
-      UserRepository userRepository,
       @Value("${jwk.key-id}") String JWK_KEY_ID,
       @Value("${jwt.public-key}") String JWT_PUBLIC_KEY,
       @Value("${jwt.private-key}") String JWT_PRIVATE_KEY) {
-    this.userRepository = userRepository;
     this.JWK_KEY_ID = JWK_KEY_ID;
     this.JWT_PUBLIC_KEY = JWT_PUBLIC_KEY;
     this.JWT_PRIVATE_KEY = JWT_PRIVATE_KEY;
@@ -153,9 +152,9 @@ public class SecurityConfig {
   }
 
   @Bean
-  public UserDetailsService userDetailsService() {
+  public UserDetailsService userDetailsService(AccountService accountService) {
     return username ->
-        userRepository
+        accountService
             .findByUsername(username)
             .map(
                 (User user) ->
@@ -251,14 +250,14 @@ public class SecurityConfig {
 
   // reworked customizer, check operability of this later!!
   @Bean
-  public OAuth2TokenCustomizer<JwtEncodingContext> tokenCustomizer() {
+  public OAuth2TokenCustomizer<JwtEncodingContext> tokenCustomizer(AccountService accountService) {
 
     return context -> {
       if (context.getPrincipal() == null) return;
 
       String username = context.getPrincipal().getName();
       // client_credentials: principal is a service client, not a user — no user claims to add
-      User user = userRepository.findByUsername(username).orElse(null);
+      User user = accountService.findByUsername(username).orElse(null);
       if (user == null) return;
 
       Set<String> scopes = context.getAuthorizedScopes();

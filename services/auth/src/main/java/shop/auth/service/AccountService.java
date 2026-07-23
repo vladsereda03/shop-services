@@ -1,5 +1,6 @@
 package shop.auth.service;
 
+import java.util.Optional;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -33,6 +34,12 @@ public class AccountService {
   public static final String INVALID_PASSWORD = "Invalid password (min 8 char)";
   public static final String INVALID_EMAIL = "Invalid email";
   public static final String INVALID_PHONE = "Invalid phone";
+
+  /** Single user-lookup entry point for the web layer and the security wiring. */
+  @Transactional(readOnly = true)
+  public Optional<User> findByUsername(String username) {
+    return userRepository.findByUsername(username);
+  }
 
   @Transactional
   public User createAndSaveUser(UserDTO dto) throws RegistrationException {
