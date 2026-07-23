@@ -21,10 +21,10 @@ jobs:
           cache: maven
 
       - name: Check code formatting
-        run: mvn -B -ntp spotless:check
+        run: ./mvnw -B -ntp spotless:check
 
       - name: Build and test
-        run: mvn -B -ntp verify
+        run: ./mvnw -B -ntp verify
 
       - name: Upload coverage reports
         uses: actions/upload-artifact@v4

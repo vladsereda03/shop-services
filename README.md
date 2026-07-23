@@ -1,6 +1,7 @@
 # Shop Services
 
 [![CI](https://github.com/vladsereda03/shop-services/actions/workflows/ci.yml/badge.svg)](https://github.com/vladsereda03/shop-services/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/vladsereda03/shop-services/actions/workflows/codeql.yml/badge.svg)](https://github.com/vladsereda03/shop-services/actions/workflows/codeql.yml)
 
 A production-grade e-commerce platform, built and run as a public showcase.
 Users browse a catalog, manage a cart, place orders, pay via
@@ -200,12 +201,21 @@ Design decisions and production-style bugs found and fixed along the way:
     the Micrometer `Propagator`) and resumed when the relay publishes, so the
     asynchronous hop still shows up as one continuous signup trace in Zipkin
     instead of splitting at the outbox boundary.
+12. **Build-time guardrails that caught real issues before their first CI run.**
+    The ArchUnit layering rule immediately flagged controllers in two services
+    reaching around their service layer straight into repositories — fixed by
+    routing those reads through the services. A local dry run of the Trivy gate
+    then flagged fixable CRITICAL CVEs in `tomcat-embed-core` and
+    `spring-security-web`, fixed by the Spring Boot 3.5.16 patch bump before
+    the gate ever ran in CI. Neither finding came from a code review —
+    guardrails earn their place by failing.
 
 ## Getting started
 
 ### Prerequisites
 
-- Java 21, Maven 3.9+
+- Java 21, Maven 3.9+ (or none — the repository ships the Maven Wrapper, use
+  `./mvnw` instead of `mvn`; CI builds with the pinned wrapper version)
 - PostgreSQL on `localhost:5432` with (empty) databases `authDB`, `products`,
   `carts`, `orders`, `payments` — each service creates and versions its schema
   with [Flyway](https://flywaydb.org/) migrations on startup (`ddl-auto` is set
@@ -377,10 +387,19 @@ mvn test      # unit tests only — fast, no Docker
 mvn verify    # unit + integration tests (Docker required)
 ```
 
+`mvn verify` also renders a JaCoCo coverage report per module
+(`target/site/jacoco/index.html`, unit and integration coverage combined); CI
+uploads all of them as the `jacoco-coverage` artifact.
+
 - **Unit tests** (no infrastructure needed): LiqPay callback processing in
   `payment` (signature verification, duplicate callbacks, status handling),
   subscription creation ordering and rollback in `payment`, catalog validation
   and stock reserve/release in `product`.
+- **Architecture tests** (ArchUnit, run with the unit tests): layered
+  architecture — `controller → service → repository`, nothing reaches around
+  the service layer — plus no field injection and no `System.out` /
+  `printStackTrace`; the conventions are enforced by the build, not by review
+  discipline (`ArchitectureTest` in every service).
 - **Integration tests** (`*IT`, require Docker): full Spring context against real
   PostgreSQL and Kafka started by [Testcontainers](https://testcontainers.com/),
   with the neighbour services stubbed at the HTTP level:
@@ -397,6 +416,32 @@ mvn verify    # unit + integration tests (Docker required)
   - `product` — concurrent stock reservation against the pessimistic row lock
     (no overselling), role/scope authorization including the custom JWT
     authorities converter.
+
+## CI & supply chain
+
+Every push and pull request runs the full pipeline
+([`ci.yml`](.github/workflows/ci.yml)):
+
+1. **Format gate** — `spotless:check` (google-java-format).
+2. **Tests** — `mvn verify`: unit, architecture and Testcontainers integration
+   tests, with the JaCoCo coverage reports uploaded as a build artifact.
+3. **Images** — all six services are built from the single parameterized
+   [`Dockerfile`](Dockerfile) and scanned with [Trivy](https://trivy.dev/):
+   findings land in the repository's Security tab, and a CRITICAL with an
+   available fix fails the build (unfixed base-image CVEs are reported, never
+   blocking). On pushes to `main` the scanned images are published to GHCR
+   with an immutable `sha-<hash>` tag plus `latest`:
+
+   ```
+   docker pull ghcr.io/vladsereda03/shop-services/<module>:latest
+   ```
+
+Beyond the pipeline, [CodeQL](.github/workflows/codeql.yml) analyzes every
+push, PR and a weekly cron — in manual build mode, so Lombok- and
+MapStruct-generated code is part of the analysis — and
+[Dependabot](.github/dependabot.yml) keeps Maven dependencies, GitHub Actions
+and the Docker base images fresh (weekly, minor/patch updates grouped into a
+single PR).
 
 ## Testing LiqPay locally
 

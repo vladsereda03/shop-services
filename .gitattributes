@@ -1,0 +1,4 @@
+# The wrapper shell script must reach the Linux CI runner with LF endings,
+# regardless of core.autocrlf on any contributor's machine.
+mvnw text eol=lf
+mvnw.cmd text eol=crlf
