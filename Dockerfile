@@ -4,7 +4,7 @@
 #   docker build --build-arg MODULE=<auth|client|product|cart|order|payment> -t shop/<name> .
 
 # ---- build stage: compile the module and its reactor dependencies ----
-FROM maven:3.9-eclipse-temurin-21 AS build
+FROM maven:3-eclipse-temurin-26 AS build
 ARG MODULE
 WORKDIR /workspace
 
