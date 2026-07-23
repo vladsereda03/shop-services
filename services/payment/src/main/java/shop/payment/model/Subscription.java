@@ -1,6 +1,7 @@
 package shop.payment.model;
 
 import jakarta.persistence.*;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -41,6 +42,10 @@ public class Subscription {
   @Column(nullable = false)
   private LocalDateTime startDate;
 
+  // soft-cancel timestamp: null while the subscription is active, set when the user cancels. The
+  // scheduler skips cancelled subscriptions; kept instead of deleting so history survives.
+  private Instant cancelledAt;
+
   // snapshot of the cart at subscribe time: goodId -> (quantity, price)
   @Builder.Default
   @ElementCollection(fetch = FetchType.EAGER)
@@ -56,6 +61,14 @@ public class Subscription {
 
   public double calculatePrice() {
     return calculatePriceKopeck() / 100.0;
+  }
+
+  public boolean isActive() {
+    return cancelledAt == null;
+  }
+
+  public void markCancelled() {
+    this.cancelledAt = Instant.now();
   }
 
   @Embeddable

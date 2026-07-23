@@ -20,6 +20,7 @@
                 <a class="nav-link" th:href="@{/}">Каталог</a>
                 <a class="nav-link" th:href="@{/cart}">Кошик</a>
                 <a class="nav-link" th:href="@{/orders}">Замовлення</a>
+                <a class="nav-link" th:href="@{/subscriptions}">Підписки</a>
                 <a class="nav-link" sec:authorize="hasRole('ADMIN')" th:href="@{/goods/add}">Додати товар</a>
             </nav>
             <div class="profile" th:if="${user != null}">

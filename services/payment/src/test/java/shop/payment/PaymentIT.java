@@ -185,17 +185,56 @@ class PaymentIT {
   // --- schedule emulator query ---
 
   @Test
-  void scheduleQueryFindsOnlyDueSubscriptionsOfMatchingPeriodicity() {
+  void scheduleQueryFindsOnlyDueActiveSubscriptionsOfMatchingPeriodicity() {
     Subscription dueMonthly =
         subscriptionRepository.saveAndFlush(
             subscriptionOf("month", LocalDateTime.now().minusDays(1)));
     subscriptionRepository.saveAndFlush(subscriptionOf("month", LocalDateTime.now().plusDays(1)));
     subscriptionRepository.saveAndFlush(subscriptionOf("week", LocalDateTime.now().minusDays(1)));
+    // due and monthly, but cancelled — the scheduler must skip it
+    Subscription cancelledMonthly = subscriptionOf("month", LocalDateTime.now().minusDays(1));
+    cancelledMonthly.markCancelled();
+    subscriptionRepository.saveAndFlush(cancelledMonthly);
 
     List<Subscription> due =
-        subscriptionRepository.findByPeriodicityAndStartDateBefore("month", LocalDateTime.now());
+        subscriptionRepository.findByPeriodicityAndStartDateBeforeAndCancelledAtIsNull(
+            "month", LocalDateTime.now());
 
     assertThat(due).extracting(Subscription::getId).containsExactly(dueMonthly.getId());
+  }
+
+  // --- cancel subscription ---
+
+  @Test
+  void cancelEndpointCancelsOwnedSubscription() throws Exception {
+    Subscription sub =
+        subscriptionRepository.saveAndFlush(
+            subscriptionOf("month", LocalDateTime.now().minusDays(1)));
+
+    mockMvc
+        .perform(
+            post("/subscriptions/my/" + sub.getId() + "/cancel")
+                .with(jwt().jwt(jwt -> jwt.claim("uid", USER_ID))))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value(sub.getId().intValue()));
+
+    assertThat(subscriptionRepository.findById(sub.getId()).orElseThrow().isActive()).isFalse();
+  }
+
+  @Test
+  void cancellingAnotherUsersSubscriptionIs404() throws Exception {
+    Subscription sub =
+        subscriptionRepository.saveAndFlush(
+            subscriptionOf("month", LocalDateTime.now().minusDays(1)));
+
+    mockMvc
+        .perform(
+            post("/subscriptions/my/" + sub.getId() + "/cancel")
+                .with(jwt().jwt(jwt -> jwt.claim("uid", 99L))))
+        .andExpect(status().isNotFound());
+
+    // a foreign cancel must not touch it — still active
+    assertThat(subscriptionRepository.findById(sub.getId()).orElseThrow().isActive()).isTrue();
   }
 
   // --- LiqPay callbacks (anonymous by design) ---

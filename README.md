@@ -98,7 +98,11 @@ flowchart TB
   in order.
 - **Subscription:** client → payment `POST /subscriptions/my` → payment snapshots
   the cart, stores the subscription, (optionally) registers it in LiqPay and clears
-  the cart; recurring charges create orders from the snapshot.
+  the cart; recurring charges create orders from the snapshot. The owner can cancel a
+  subscription from the subscriptions page (`POST /subscriptions/my/{id}/cancel`): a
+  soft-cancel the scheduler then skips, which — when charges are registered at LiqPay —
+  tells LiqPay to stop *before* the local commit, so a failure can never leave a
+  subscription believed cancelled yet still charging.
 
 ## Engineering highlights
 

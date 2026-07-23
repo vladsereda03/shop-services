@@ -531,6 +531,32 @@ a:hover {
     font-size: 14px;
 }
 
+/* Subscription status badge + cancel action */
+
+.subscription-status {
+    font-size: 13px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.subscription-status-active {
+    background: var(--accent-soft);
+    color: var(--success-text);
+    border: 1px solid var(--accent-soft-border);
+}
+
+.subscription-status-cancelled {
+    background: var(--bg);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+}
+
+.subscription-cancel {
+    margin-top: 14px;
+}
+
 /* Form rows and custom file upload */
 
 .form-row {

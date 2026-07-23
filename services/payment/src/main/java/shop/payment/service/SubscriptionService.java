@@ -108,6 +108,37 @@ public class SubscriptionService {
     return subscriptionRepository.findAllByUserIdOrderByIdDesc(userId);
   }
 
+  // cancel a subscription so the scheduler stops charging it. External-first ordering: when the
+  // charge is registered at LiqPay, tell LiqPay to stop BEFORE committing the local cancellation,
+  // so a local failure can never leave a subscription we believe cancelled yet still charging.
+  @Transactional
+  public Subscription cancel(Long userId, Long subscriptionId) {
+    Subscription subscription =
+        subscriptionRepository
+            .findById(subscriptionId)
+            .filter(s -> s.getUserId().equals(userId))
+            // 404 rather than 403 so we don't reveal that another user's subscription exists
+            .orElseThrow(
+                () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Subscription not found"));
+
+    if (!subscription.isActive()) {
+      // idempotent: a double click or a retried request cancels only once
+      return subscription;
+    }
+
+    if (registerInLiqPay) {
+      unregisterInLiqPay(subscription);
+    } else {
+      // LiqPay sandbox has no subscriptions — the scheduler emulated the charges, nothing to stop
+      logger.info("LiqPay unsubscribe skipped for subscription {}: emulation mode", subscriptionId);
+    }
+
+    subscription.markCancelled();
+    Subscription cancelled = subscriptionRepository.save(subscription);
+    logger.info("Subscription {} cancelled for user {}", subscriptionId, userId);
+    return cancelled;
+  }
+
   // a confirmed recurring charge turns the stored snapshot into an order; called by the LiqPay
   // callback (with the charge's payment_id as the idempotency key) and by the local schedule
   // emulator (paymentId null — the scheduler has no LiqPay charge to key on)
@@ -171,6 +202,34 @@ public class SubscriptionService {
     } catch (Exception e) {
       throw new ResponseStatusException(
           HttpStatus.BAD_GATEWAY, "LiqPay subscribe request failed", e);
+    }
+  }
+
+  // tells LiqPay to stop the recurring charge (mirror of registerInLiqPay). Only reached when
+  // subscriptions are actually registered at LiqPay; the sandbox emulation path never calls it.
+  private void unregisterInLiqPay(Subscription subscription) {
+    Map<String, String> params = new HashMap<>();
+    params.put("version", "3");
+    params.put("action", "unsubscribe");
+    params.put("order_id", String.valueOf(subscription.getId()));
+
+    try {
+      LiqPay liqpay = new LiqPay(liqPayProperties.publicKey(), liqPayProperties.privateKey());
+      Map<String, Object> response = liqpay.api("request", params);
+      logger.info(
+          "LiqPay unsubscribe response for subscription {}: {}", subscription.getId(), response);
+
+      Object status = response.get("status");
+      if ("error".equals(status) || "failure".equals(status)) {
+        throw new ResponseStatusException(
+            HttpStatus.BAD_GATEWAY,
+            "LiqPay rejected the unsubscribe: " + response.get("err_description"));
+      }
+    } catch (ResponseStatusException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_GATEWAY, "LiqPay unsubscribe request failed", e);
     }
   }
 }

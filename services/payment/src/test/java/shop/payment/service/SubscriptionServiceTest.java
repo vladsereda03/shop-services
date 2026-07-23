@@ -3,6 +3,7 @@ package shop.payment.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -12,10 +13,12 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -174,6 +177,56 @@ class SubscriptionServiceTest {
     subscriptionService.createOrderFromSubscription(subscription, null);
 
     server.verify();
+  }
+
+  // --- cancel ---
+
+  @Test
+  void cancelMarksSubscriptionInactiveInEmulationMode() {
+    Subscription subscription = Subscription.builder().id(77L).userId(USER_ID).build();
+    when(subscriptionRepository.findById(77L)).thenReturn(Optional.of(subscription));
+    when(subscriptionRepository.save(any(Subscription.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    Subscription result = subscriptionService.cancel(USER_ID, 77L);
+
+    assertThat(result.isActive()).isFalse();
+    assertThat(result.getCancelledAt()).isNotNull();
+    verify(subscriptionRepository).save(subscription);
+  }
+
+  @Test
+  void cancelOfAnotherUsersSubscriptionIsNotFound() {
+    // owned by a different user: 404 (not 403) so existence is not revealed
+    Subscription foreign = Subscription.builder().id(77L).userId(99L).build();
+    when(subscriptionRepository.findById(77L)).thenReturn(Optional.of(foreign));
+
+    assertThatExceptionOfType(ResponseStatusException.class)
+        .isThrownBy(() -> subscriptionService.cancel(USER_ID, 77L))
+        .satisfies(e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+
+    verify(subscriptionRepository, never()).save(any());
+  }
+
+  @Test
+  void cancelOfMissingSubscriptionIsNotFound() {
+    when(subscriptionRepository.findById(77L)).thenReturn(Optional.empty());
+
+    assertThatExceptionOfType(ResponseStatusException.class)
+        .isThrownBy(() -> subscriptionService.cancel(USER_ID, 77L))
+        .satisfies(e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+  }
+
+  @Test
+  void cancelIsIdempotentForAlreadyCancelledSubscription() {
+    Subscription alreadyCancelled =
+        Subscription.builder().id(77L).userId(USER_ID).cancelledAt(Instant.now()).build();
+    when(subscriptionRepository.findById(77L)).thenReturn(Optional.of(alreadyCancelled));
+
+    Subscription result = subscriptionService.cancel(USER_ID, 77L);
+
+    assertThat(result).isSameAs(alreadyCancelled);
+    verify(subscriptionRepository, never()).save(any());
   }
 
   private static SubscriptionForm validForm() {

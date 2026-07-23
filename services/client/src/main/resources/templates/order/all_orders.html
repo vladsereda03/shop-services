@@ -12,7 +12,7 @@
 
     <div class="card order-card" th:each="order : ${orders}">
         <div class="order-header">
-            <h2 th:text="|Замовлення №${order.id}|">Замовлення №</h2>
+            <h2 th:text="'Замовлення №' + ${order.id}">Замовлення №</h2>
             <span class="order-date" th:text="${order.createdAt}">час оформлення</span>
         </div>
 

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="uk" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Мої підписки')}"></head>
+<body>
+
+<th:block th:replace="~{fragments/layout :: header}"/>
+
+<main class="page page-narrow">
+    <h1 class="page-title">Мої підписки</h1>
+
+    <div class="banner banner-error" th:if="${orderError}" th:text="${orderError}"></div>
+    <div class="banner banner-success" th:if="${subscriptionSuccess}" th:text="${subscriptionSuccess}"></div>
+
+    <p class="empty-state" th:if="${#lists.isEmpty(subscriptions)}">У вас ще немає підписок</p>
+
+    <div class="card order-card" th:each="sub : ${subscriptions}">
+        <div class="order-header">
+            <h2 th:text="'Підписка №' + ${sub.id}">Підписка №</h2>
+            <span class="subscription-status subscription-status-active"
+                  th:if="${sub.cancelledAt == null}">Активна</span>
+            <span class="subscription-status subscription-status-cancelled"
+                  th:unless="${sub.cancelledAt == null}">Скасована</span>
+        </div>
+
+        <div class="meta-row">
+            <span class="meta-label">Періодичність:</span>
+            <span th:switch="${sub.periodicity}">
+                <span th:case="'day'">Щодня</span>
+                <span th:case="'week'">Щотижня</span>
+                <span th:case="'month'">Щомісяця</span>
+                <span th:case="'year'">Щороку</span>
+                <span th:case="*" th:text="${sub.periodicity}">періодичність</span>
+            </span>
+        </div>
+        <div class="meta-row">
+            <span class="meta-label">Перше списання:</span>
+            <span th:text="${sub.startDate}">дата</span>
+        </div>
+
+        <div class="cart-total">
+            <span>Сума списання</span>
+            <span class="price" th:text="|${sub.totalPrice} грн|"></span>
+        </div>
+
+        <!-- only active subscriptions can be cancelled; th:action lets Spring Security inject the CSRF token -->
+        <form class="subscription-cancel" th:if="${sub.cancelledAt == null}"
+              th:action="@{/subscriptions/{id}/cancel(id=${sub.id})}" method="post"
+              onsubmit="return confirm('Скасувати підписку? Регулярні списання припиняться.')">
+            <button type="submit" class="btn btn-secondary btn-sm">Скасувати</button>
+        </form>
+    </div>
+
+    <a class="back-link" th:href="@{/}">До каталогу</a>
+</main>
+
+</body>
+</html>

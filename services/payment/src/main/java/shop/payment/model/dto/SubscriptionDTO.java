@@ -1,5 +1,6 @@
 package shop.payment.model.dto;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -18,6 +19,8 @@ public class SubscriptionDTO {
   private String currencyCode;
   private String periodicity;
   private LocalDateTime startDate;
+  // null while active; set when cancelled — the client shows the status from it
+  private Instant cancelledAt;
   private double totalPrice;
 
   public static SubscriptionDTO from(Subscription subscription) {
@@ -27,6 +30,7 @@ public class SubscriptionDTO {
         subscription.getCurrencyCode(),
         subscription.getPeriodicity(),
         subscription.getStartDate(),
+        subscription.getCancelledAt(),
         subscription.calculatePrice());
   }
 }

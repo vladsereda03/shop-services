@@ -44,7 +44,7 @@ public class SubscriptionScheduleService {
 
   private void charge(String periodicity) {
     List<Subscription> due =
-        subscriptionRepository.findByPeriodicityAndStartDateBefore(
+        subscriptionRepository.findByPeriodicityAndStartDateBeforeAndCancelledAtIsNull(
             periodicity, LocalDateTime.now());
     logger.info("Scheduled '{}' run: {} subscription(s) due", periodicity, due.size());
 

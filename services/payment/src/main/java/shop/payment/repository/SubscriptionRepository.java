@@ -7,8 +7,9 @@ import shop.payment.model.Subscription;
 
 public interface SubscriptionRepository extends JpaRepository<Subscription, Long> {
 
-  // due subscriptions for a scheduled run: started in the past, matching period
-  List<Subscription> findByPeriodicityAndStartDateBefore(
+  // due subscriptions for a scheduled run: started in the past, matching period, still active
+  // (cancelled ones are skipped so they stop being charged)
+  List<Subscription> findByPeriodicityAndStartDateBeforeAndCancelledAtIsNull(
       String periodicity, LocalDateTime startDate);
 
   List<Subscription> findAllByUserIdOrderByIdDesc(Long userId);

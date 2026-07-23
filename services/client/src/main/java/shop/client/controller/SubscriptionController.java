@@ -1,10 +1,13 @@
 package shop.client.controller;
 
+import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
@@ -76,5 +79,38 @@ public class SubscriptionController {
           "orderError", "Платіжний сервіс відхилив підписку, спробуйте пізніше");
       return "redirect:/cart";
     }
+  }
+
+  @GetMapping("/subscriptions")
+  public String mySubscriptions(Model model) {
+    List<SubscriptionDTO> subscriptions =
+        restClient
+            .get()
+            .uri(paymentBaseUrl + "/subscriptions/my")
+            .retrieve()
+            .body(new ParameterizedTypeReference<>() {});
+
+    model.addAttribute("subscriptions", subscriptions);
+    return "payment/subscriptions";
+  }
+
+  @PostMapping("/subscriptions/{id}/cancel")
+  public String cancelSubscription(@PathVariable Long id, RedirectAttributes redirectAttributes) {
+    try {
+      restClient
+          .post()
+          .uri(paymentBaseUrl + "/subscriptions/my/{id}/cancel", id)
+          .retrieve()
+          .toBodilessEntity();
+
+      redirectAttributes.addFlashAttribute("subscriptionSuccess", "Підписку №" + id + " скасовано");
+    } catch (HttpClientErrorException e) {
+      // 404: not the owner, or the subscription is already gone
+      redirectAttributes.addFlashAttribute("orderError", "Не вдалося скасувати підписку");
+    } catch (HttpServerErrorException e) {
+      redirectAttributes.addFlashAttribute(
+          "orderError", "Платіжний сервіс тимчасово недоступний, спробуйте пізніше");
+    }
+    return "redirect:/subscriptions";
   }
 }
