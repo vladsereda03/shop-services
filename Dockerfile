@@ -29,7 +29,7 @@ RUN mvn -B -ntp -pl services/${MODULE} -am package -DskipTests
 RUN java -Djarmode=tools -jar services/${MODULE}/target/*-SNAPSHOT.jar extract --layers --launcher --destination /extracted
 
 # ---- runtime stage: JRE only, no Maven/JDK/sources ----
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:25-jre
 RUN useradd --system spring
 USER spring
 WORKDIR /app
