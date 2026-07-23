@@ -57,7 +57,7 @@
     <spotless.version>2.44.5</spotless.version>
     <resilience4j.version>2.3.0</resilience4j.version>
     <!-- 2.8.x is the springdoc line for Boot 3.5; 3.x requires Boot 4 -->
-    <springdoc.version>2.8.17</springdoc.version>
+    <springdoc.version>3.0.3</springdoc.version>
     <jacoco.version>0.8.13</jacoco.version>
     <archunit.version>1.4.1</archunit.version>
   </properties>
