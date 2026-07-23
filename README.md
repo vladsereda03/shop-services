@@ -2,8 +2,9 @@
 
 [![CI](https://github.com/vladsereda03/shop-services/actions/workflows/ci.yml/badge.svg)](https://github.com/vladsereda03/shop-services/actions/workflows/ci.yml)
 
-An educational e-commerce project. Users browse a catalog, manage a cart, place orders,
-pay via [LiqPay](https://www.liqpay.ua/) and set up recurring subscriptions;
+A production-grade e-commerce platform, built and run as a public showcase.
+Users browse a catalog, manage a cart, place orders, pay via
+[LiqPay](https://www.liqpay.ua/) and set up recurring subscriptions;
 administrators manage the catalog.
 
 **Stack:** Java 21 · Spring Boot 3.5 · Spring Security / Spring Authorization Server
@@ -427,7 +428,10 @@ default: daily/weekly/monthly/yearly at 15:00).
   keys and the OAuth2 client secrets — with dev defaults baked in for a one-command
   local run and overridable in production. The committed dev defaults are demo
   credentials, not real ones.
-- Planned next: Kubernetes manifests, an API gateway.
+- Planned next: Kubernetes deployment (Helm chart, actuator-driven
+  liveness/readiness probes, HPA). An API gateway is deliberately not on the
+  roadmap: the client BFF is already the single browser-facing entry point, and
+  in Kubernetes the Ingress takes over edge routing.
 
 ## Repository layout
 
