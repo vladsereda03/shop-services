@@ -1,0 +1,42 @@
+// Grafana Alloy: collect the compose stack's container logs and ship them to Loki.
+// (Alloy is Grafana's current agent — Promtail is end-of-life.)
+
+// Discover running containers through the Docker Engine API (socket mounted read-only).
+discovery.docker "containers" {
+	host = "unix:///var/run/docker.sock"
+}
+
+// Keep only this compose project's containers and turn Docker metadata into clean
+// Loki labels: `service` (the compose service name, matching Prometheus's
+// `application` label) and `container` (the container name).
+discovery.relabel "shop" {
+	targets = discovery.docker.containers.targets
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+		regex         = "shop"
+		action        = "keep"
+	}
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		target_label  = "service"
+	}
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		target_label  = "container"
+	}
+}
+
+// Tail each container's stdout/stderr via the Docker API and forward to Loki.
+loki.source.docker "shop" {
+	host       = "unix:///var/run/docker.sock"
+	targets    = discovery.relabel.shop.output
+	forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}

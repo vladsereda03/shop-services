@@ -4,7 +4,7 @@
 #   docker build --build-arg MODULE=<auth|client|product|cart|order|payment> -t shop/<name> .
 
 # ---- build stage: compile the module and its reactor dependencies ----
-FROM maven:3.9-eclipse-temurin-21 AS build
+FROM maven:3.9-eclipse-temurin-25 AS build
 ARG MODULE
 WORKDIR /workspace
 
@@ -29,7 +29,7 @@ RUN mvn -B -ntp -pl services/${MODULE} -am package -DskipTests
 RUN java -Djarmode=tools -jar services/${MODULE}/target/*-SNAPSHOT.jar extract --layers --launcher --destination /extracted
 
 # ---- runtime stage: JRE only, no Maven/JDK/sources ----
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:25-jre
 RUN useradd --system spring
 USER spring
 WORKDIR /app

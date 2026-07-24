@@ -9,6 +9,11 @@ spring:
   application:
     # short lowercase name: it becomes the service name in Zipkin traces
     name: order
+  threads:
+    virtual:
+      # one virtual thread per request: blocking work (JDBC, neighbour HTTP) parks
+      # the virtual thread and frees its carrier instead of holding a pooled OS thread
+      enabled: true
   http:
     client:
       # a hung neighbour must become an error, not an eternal wait — without

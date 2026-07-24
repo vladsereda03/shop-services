@@ -17,6 +17,14 @@ spring:
     # short lowercase name: it becomes the service name in Zipkin traces
     name: auth
 
+  threads:
+    virtual:
+      # one virtual thread per request: blocking work (JDBC, form login, token
+      # issuing) parks the virtual thread instead of holding a pooled OS thread.
+      # The outbox poller runs on virtual threads too; its SmartLifecycle stop()
+      # still ends polling cleanly on shutdown
+      enabled: true
+
   datasource:
     driver-class-name: org.postgresql.Driver
     url: jdbc:postgresql://localhost:5432/authDB

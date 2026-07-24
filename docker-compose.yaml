@@ -7,7 +7,19 @@ include:
   - infra/docker/kafka/docker-compose.yaml
 
 # shared fragments
-x-db-credentials: &db-credentials
+x-structured-logging: &structured-logging
+  # ECS (Elastic Common Schema) JSON to stdout, so the log collector (Alloy) ships
+  # structured fields — trace.id, span.id, log.level — instead of a text line that
+  # would have to be re-parsed. Boot emits this natively (no logback.xml). Compose
+  # runs unprofiled, so this only affects the container stack; a host-mode
+  # `java -jar` run keeps the human-readable console format.
+  LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+
+# environment shared by the five database-backed services: the structured-logging
+# env above plus the shared PostgreSQL credentials, exposed as one anchor so each
+# service needs only a single merge (`<<: *db-service-env`)
+x-db-service-env: &db-service-env
+  <<: *structured-logging
   SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-shop}
   SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-shop}
 
@@ -19,7 +31,7 @@ services:
     image: shop/auth
     container_name: shop-auth
     environment:
-      <<: *db-credentials
+      <<: *db-service-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/authDB
       SPRING_KAFKA_BOOTSTRAP_SERVERS: broker-1:19092,broker-2:19092,broker-3:19092
       # RSA pair for JWT signing, single-line Base64 DER (see .env.example)
@@ -57,6 +69,7 @@ services:
     image: shop/client
     container_name: shop-client
     environment:
+      <<: *structured-logging
       # these two are localhost in application.yaml (host mode) — point them at containers
       SERVICES_ORDER_BASE_URL: http://order:8084
       SERVICES_PAYMENT_BASE_URL: http://payment:8085
@@ -80,7 +93,7 @@ services:
     image: shop/product
     container_name: shop-product
     environment:
-      <<: *db-credentials
+      <<: *db-service-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/products
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
     networks:
@@ -102,7 +115,7 @@ services:
     image: shop/cart
     container_name: shop-cart
     environment:
-      <<: *db-credentials
+      <<: *db-service-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/carts
       SPRING_KAFKA_BOOTSTRAP_SERVERS: broker-1:19092,broker-2:19092,broker-3:19092
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
@@ -129,7 +142,7 @@ services:
     image: shop/order
     container_name: shop-order
     environment:
-      <<: *db-credentials
+      <<: *db-service-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/orders
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
     depends_on:
@@ -148,7 +161,7 @@ services:
     image: shop/payment
     container_name: shop-payment
     environment:
-      <<: *db-credentials
+      <<: *db-service-env
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/payments
       # localhost in application.yaml (host mode) — point it at the order container
       SERVICES_ORDER_BASE_URL: http://order:8084
@@ -205,6 +218,32 @@ services:
     ports:
       - "9411:9411"
 
+  loki:
+    image: grafana/loki:3.5.5
+    container_name: shop-loki
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./infra/docker/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - shop_loki_data:/loki
+    ports:
+      - "3100:3100"
+
+  alloy:
+    image: grafana/alloy:v1.11.0
+    container_name: shop-alloy
+    # run as root so the agent can read the Docker socket; :ro keeps it read-only
+    user: root
+    command: run --server.http.listen-addr=0.0.0.0:12345 /etc/alloy/config.alloy
+    volumes:
+      - ./infra/docker/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # the socket is how Alloy discovers containers and tails their logs
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      # Alloy's own debug UI (component graph, live debugging)
+      - "12345:12345"
+    depends_on:
+      - loki
+
   grafana:
     image: grafana/grafana:12.1.0
     container_name: shop-grafana
@@ -220,8 +259,10 @@ services:
       - "3000:3000"
     depends_on:
       - prometheus
+      - loki
 
 volumes:
   shop_pg16_data:
   shop_prometheus_data:
   shop_grafana_data:
+  shop_loki_data:

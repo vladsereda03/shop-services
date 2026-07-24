@@ -8,7 +8,7 @@ Users browse a catalog, manage a cart, place orders, pay via
 [LiqPay](https://www.liqpay.ua/) and set up recurring subscriptions;
 administrators manage the catalog.
 
-**Stack:** Java 21 · Spring Boot 3.5 · Spring Security / Spring Authorization Server
+**Stack:** Java 25 (virtual threads) · Spring Boot 3.5 · Spring Security / Spring Authorization Server
 (OAuth2 + OIDC) · Spring Data JPA · PostgreSQL · Apache Kafka · Thymeleaf ·
 springdoc-openapi (Swagger UI) · Prometheus + Grafana + Zipkin (observability) ·
 Maven (multi-module monorepo).
@@ -214,7 +214,7 @@ Design decisions and production-style bugs found and fixed along the way:
 
 ### Prerequisites
 
-- Java 21, Maven 3.9+ (or none — the repository ships the Maven Wrapper, use
+- Java 25, Maven 3.9+ (or none — the repository ships the Maven Wrapper, use
   `./mvnw` instead of `mvn`; CI builds with the pinned wrapper version)
 - PostgreSQL on `localhost:5432` with (empty) databases `authDB`, `products`,
   `carts`, `orders`, `payments` — each service creates and versions its schema

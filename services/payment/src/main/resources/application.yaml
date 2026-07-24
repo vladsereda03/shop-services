@@ -32,6 +32,13 @@ spring:
   application:
     # short lowercase name: it becomes the service name in Zipkin traces
     name: payment
+  threads:
+    virtual:
+      # one virtual thread per request: blocking work (JDBC, neighbour HTTP) parks
+      # the virtual thread and frees its carrier instead of holding a pooled OS thread.
+      # The @Scheduled charge jobs run on virtual threads too — the JVM still cannot
+      # exit under them, Tomcat's await thread is non-daemon
+      enabled: true
   http:
     client:
       # a hung neighbour must become an error, not an eternal wait — without

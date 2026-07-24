@@ -20,6 +20,11 @@ spring:
   application:
     # short lowercase name: it becomes the service name in Zipkin traces
     name: client
+  threads:
+    virtual:
+      # one virtual thread per request: the BFF spends its time waiting on the API
+      # services, so parking a virtual thread beats holding a pooled OS thread
+      enabled: true
   http:
     client:
       # a hung neighbour must become an error, not an eternal wait — without

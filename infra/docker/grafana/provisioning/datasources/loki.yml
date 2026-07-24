@@ -1,0 +1,27 @@
+# Grafana datasource provisioning: registers Loki alongside the Prometheus
+# datasource, so logs are queryable in Explore with no manual setup.
+#
+# The derived field is the point of the third pillar: it recognises the `traceId`
+# field in each ECS log line and turns it into a link straight to the matching
+# Zipkin trace — one click from a log message to its distributed trace. The link
+# is resolved in the operator's browser, so it targets localhost:9411 (the host),
+# not the in-network zipkin alias. `$${__value.raw}` is written with a doubled
+# dollar so Grafana's provisioning env-interpolation leaves the derived-field
+# template `${__value.raw}` intact.
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy # Grafana backend proxies queries to Loki
+    url: http://loki:3100
+    isDefault: false
+    editable: false
+    jsonData:
+      derivedFields:
+        - name: traceId
+          matcherType: regex
+          matcherRegex: '"traceId":"(\w+)"'
+          url: 'http://localhost:9411/zipkin/traces/$${__value.raw}'
+          urlDisplayLabel: 'View in Zipkin'

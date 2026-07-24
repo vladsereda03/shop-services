@@ -47,14 +47,16 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <java.version>21</java.version>
+    <!-- the Boot parent derives maven.compiler.release from this, so source/target
+         are deliberately not set: with release in play they would be ignored anyway
+         and could only drift out of sync -->
+    <java.version>25</java.version>
     <mapstruct.version>1.6.2</mapstruct.version>
-    <lombok.version>1.18.40</lombok.version>
+    <!-- 1.18.42+ fixes javadoc parsing on JDK 25 -->
+    <lombok.version>1.18.46</lombok.version>
     <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
-    <maven.compiler.source>21</maven.compiler.source>
-    <maven.compiler.target>21</maven.compiler.target>
-    <spring-cloud.version>2023.0.2</spring-cloud.version>
     <spotless.version>2.44.5</spotless.version>
+    <google-java-format.version>1.35.0</google-java-format.version>
     <resilience4j.version>2.3.0</resilience4j.version>
     <!-- 2.8.x is the springdoc line for Boot 3.5; 3.x requires Boot 4 -->
     <springdoc.version>2.8.17</springdoc.version>
@@ -145,8 +147,46 @@
         <configuration>
           <java>
             <removeUnusedImports/>
-            <googleJavaFormat/>
+            <!-- pinned explicitly: the version Spotless 2.44.5 defaults to calls javac
+                 internals whose signature changed in JDK 25 (NoSuchMethodError on
+                 Log$DeferredDiagnosticHandler.getDiagnostics) -->
+            <googleJavaFormat>
+              <version>${google-java-format.version}</version>
+            </googleJavaFormat>
           </java>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <!-- exposes the local-repository path of every dependency as a property named
+             groupId:artifactId:type — used for the Mockito agent argument below -->
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>resolve-dependency-paths</id>
+            <goals>
+              <goal>properties</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <!-- Mockito is attached as a JVM agent instead of letting it self-attach at
+             runtime: self-attaching is deprecated (JDK warns today, a future JDK will
+             refuse it). The mockito-core jar is the agent itself — its manifest
+             declares Premain-Class.
+             @{argLine} is Surefire's late replacement: it expands the argLine property
+             at execution time, so the JaCoCo agent that prepare-agent puts there is
+             kept instead of being overwritten. -->
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!--suppress MavenModelInspection : the org.mockito:mockito-core:jar property is
+              generated at build time by maven-dependency-plugin:properties above; the IDE
+              cannot resolve it statically, but Maven does (verified: no self-attach warning) -->
+          <argLine>@{argLine} -javaagent:${org.mockito:mockito-core:jar}</argLine>
         </configuration>
       </plugin>
 
