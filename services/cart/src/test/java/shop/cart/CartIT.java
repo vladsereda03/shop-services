@@ -18,6 +18,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import java.time.Duration;
+import java.util.List;
+import java.util.Properties;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerConfig;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +51,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.KafkaContainer;
 import shop.cart.client.ProductClient;
+import shop.cart.config.KafkaErrorConfig;
 import shop.cart.model.Cart;
 import shop.cart.model.dto.ProductDTO;
 import shop.cart.repository.CartRepository;
@@ -51,7 +61,9 @@ import shop.event.UserRegisteredEvent;
 // product-service is the only stubbed piece (its OAuth2 RestClient is replaced below)
 @SpringBootTest(
     properties = {
-      "spring.kafka.producer.value-serializer=org.springframework.kafka.support.serializer.JsonSerializer"
+      "spring.kafka.producer.value-serializer=org.springframework.kafka.support.serializer.JsonSerializer",
+      // single-broker Kafka in the container: the DLT topic cannot have 3 replicas
+      "app.kafka.topic.dlt.replicas=1"
     })
 @AutoConfigureMockMvc
 @Testcontainers
@@ -111,6 +123,53 @@ class CartIT {
         .atMost(Duration.ofSeconds(30))
         .untilAsserted(() -> assertThat(cartRepository.findByUserId(203L)).isPresent());
     assertThat(cartRepository.findAll()).extracting(Cart::getUserId).containsOnlyOnce(202L);
+  }
+
+  @Test
+  void poisonMessageIsDeadLetteredWithoutBlockingThePartition() throws Exception {
+    String bootstrap = kafka.getBootstrapServers();
+
+    try (KafkaConsumer<String, String> deadLetters = stringConsumer(bootstrap)) {
+      deadLetters.subscribe(List.of(KafkaErrorConfig.USER_REGISTERED_DLT));
+      deadLetters.poll(Duration.ofMillis(500)); // force partition assignment before producing
+
+      // a value the JsonDeserializer cannot turn into a UserRegisteredEvent
+      try (KafkaProducer<String, String> raw = stringProducer(bootstrap)) {
+        raw.send(new ProducerRecord<>(USER_REGISTERED_TOPIC, "poison", "not-a-valid-event")).get();
+      }
+
+      // a valid event queued after the poison on the same single partition: were the partition
+      // wedged by the poison, this cart would never be created
+      kafkaTemplate.send(USER_REGISTERED_TOPIC, new UserRegisteredEvent(909L, "after-poison"));
+      await()
+          .atMost(Duration.ofSeconds(30))
+          .untilAsserted(() -> assertThat(cartRepository.findByUserId(909L)).isPresent());
+
+      // and the poison itself was routed to the dead-letter topic instead of looping forever
+      await()
+          .atMost(Duration.ofSeconds(15))
+          .untilAsserted(
+              () -> assertThat(deadLetters.poll(Duration.ofMillis(500)).count()).isPositive());
+    }
+  }
+
+  private static KafkaConsumer<String, String> stringConsumer(String bootstrap) {
+    Properties props = new Properties();
+    props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrap);
+    props.put(ConsumerConfig.GROUP_ID_CONFIG, "cart-dlt-it");
+    props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+    props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+    props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+    props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+    return new KafkaConsumer<>(props);
+  }
+
+  private static KafkaProducer<String, String> stringProducer(String bootstrap) {
+    Properties props = new Properties();
+    props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrap);
+    props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+    props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+    return new KafkaProducer<>(props);
   }
 
   // --- REST + stock reservation ---

@@ -18,7 +18,9 @@ public class GoodDTO {
   private long priceKopeck;
   private String description;
   private String category;
-  private byte[] image;
+  // public object-storage URL of the image; null only for legacy rows not yet backfilled. Image
+  // bytes are no longer carried in the payload — the browser fetches them from object storage.
+  private String imageUrl;
 
   private List<ManufacturerDTO> manufacturers;
 
@@ -30,7 +32,6 @@ public class GoodDTO {
     this.priceKopeck = good.getPriceKopeck();
     this.description = good.getDescription();
     this.category = good.getCategory();
-    this.image = good.getImage();
     this.quantity = good.getQuantity();
     this.manufacturers =
         good.getManufacturers().stream().map(ManufacturerDTO::new).collect(Collectors.toList());

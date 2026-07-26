@@ -20,6 +20,7 @@ public class ProductService {
 
   private final GoodRepository goodRepository;
   private final ManufacturerRepository manufacturerRepository;
+  private final ImageStorage imageStorage;
 
   @Transactional(readOnly = true)
   public List<Good> getAll() {
@@ -86,9 +87,13 @@ public class ProductService {
             request.getPriceKopeck(),
             request.getDescription(),
             request.getCategory(),
-            image,
             manufacturerRepository.findAllById(request.getManufacturerIds()));
     good.setQuantity(request.getQuantity());
+
+    if (image != null) {
+      // bytes go to object storage; the catalog row keeps only the key
+      good.setImageKey(imageStorage.put(image));
+    }
 
     return goodRepository.saveAndFlush(good);
   }

@@ -11,8 +11,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import shop.product.model.Good;
 import shop.product.model.dto.CreateGoodRequest;
 import shop.product.model.dto.GoodDTO;
+import shop.product.service.ImageStorage;
 import shop.product.service.ProductService;
 
 @RestController
@@ -21,23 +23,32 @@ import shop.product.service.ProductService;
 public class ProductController {
 
   private final ProductService productService;
+  private final ImageStorage imageStorage;
 
   @GetMapping()
   public List<GoodDTO> getAll() {
-
-    return productService.getAll().stream().map(GoodDTO::new).collect(Collectors.toList());
+    return productService.getAll().stream().map(this::toDto).collect(Collectors.toList());
   }
 
   @GetMapping("/{id}")
   public GoodDTO getById(@PathVariable("id") long id) {
-
-    return new GoodDTO(productService.getById(id));
+    return toDto(productService.getById(id));
   }
 
   // catalog management: requires the ADMIN role (see SecurityConfig)
   @PostMapping()
   public GoodDTO create(@Valid @RequestBody CreateGoodRequest request) {
-    return new GoodDTO(productService.createGood(request));
+    return toDto(productService.createGood(request));
+  }
+
+  // map entity -> DTO, deriving the public image URL from the stored key. Legacy rows without a
+  // key keep their inline bytes so the client can still render them until they are migrated.
+  private GoodDTO toDto(Good good) {
+    GoodDTO dto = new GoodDTO(good);
+    if (good.getImageKey() != null) {
+      dto.setImageUrl(imageStorage.urlFor(good.getImageKey()));
+    }
+    return dto;
   }
 
   @PostMapping("/{id}/reserve")

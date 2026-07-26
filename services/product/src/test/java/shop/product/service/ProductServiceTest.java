@@ -3,6 +3,9 @@ package shop.product.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -30,6 +33,8 @@ class ProductServiceTest {
   @Mock private GoodRepository goodRepository;
 
   @Mock private ManufacturerRepository manufacturerRepository;
+
+  @Mock private ImageStorage imageStorage;
 
   @InjectMocks private ProductService productService;
 
@@ -84,6 +89,7 @@ class ProductServiceTest {
     request.setImageBase64(Base64.getEncoder().encodeToString(imageBytes));
     Manufacturer manufacturer = new Manufacturer("Lego", "lego.com", "bricks");
     when(manufacturerRepository.findAllById(List.of(3L))).thenReturn(List.of(manufacturer));
+    when(imageStorage.put(any(byte[].class))).thenReturn("stored-key");
     when(goodRepository.saveAndFlush(any(Good.class))).thenAnswer(inv -> inv.getArgument(0));
 
     Good saved = productService.createGood(request);
@@ -93,12 +99,14 @@ class ProductServiceTest {
     assertThat(saved.getDescription()).isEqualTo("description");
     assertThat(saved.getCategory()).isEqualTo("toys");
     assertThat(saved.getQuantity()).isEqualTo(7);
-    assertThat(saved.getImage()).isEqualTo(imageBytes);
+    // the bytes go to object storage — the entity keeps only the returned key
+    assertThat(saved.getImageKey()).isEqualTo("stored-key");
+    verify(imageStorage).put(eq(imageBytes));
     assertThat(saved.getManufacturers()).containsExactly(manufacturer);
   }
 
   @Test
-  void createGoodWithoutImageStoresNull() {
+  void createGoodWithoutImageStoresNoKey() {
     CreateGoodRequest request = validRequest();
     request.setImageBase64("   ");
     when(manufacturerRepository.findAllById(List.of(3L))).thenReturn(List.of());
@@ -106,7 +114,8 @@ class ProductServiceTest {
 
     Good saved = productService.createGood(request);
 
-    assertThat(saved.getImage()).isNull();
+    assertThat(saved.getImageKey()).isNull();
+    verify(imageStorage, never()).put(any());
   }
 
   // --- reserve / release ---
@@ -173,7 +182,7 @@ class ProductServiceTest {
   }
 
   private static Good goodWithQuantity(int quantity) {
-    Good good = new Good("Конструктор", 129900L, "description", "toys", null, List.of());
+    Good good = new Good("Конструктор", 129900L, "description", "toys", List.of());
     good.setQuantity(quantity);
     return good;
   }

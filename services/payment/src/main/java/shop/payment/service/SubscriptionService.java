@@ -1,7 +1,10 @@
 package shop.payment.service;
 
 import com.liqpay.LiqPay;
+import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.IsoFields;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,11 +20,13 @@ import shop.payment.client.CartClient;
 import shop.payment.client.OrderClient;
 import shop.payment.config.LiqPayProperties;
 import shop.payment.model.Subscription;
+import shop.payment.model.SubscriptionCharge;
 import shop.payment.model.SupportedCurrency;
 import shop.payment.model.dto.CartDTO;
 import shop.payment.model.dto.CartItemDTO;
 import shop.payment.model.dto.OrderItemDTO;
 import shop.payment.model.dto.SubscriptionForm;
+import shop.payment.repository.SubscriptionChargeRepository;
 import shop.payment.repository.SubscriptionRepository;
 
 @Service
@@ -33,6 +38,7 @@ public class SubscriptionService {
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
   private final SubscriptionRepository subscriptionRepository;
+  private final SubscriptionChargeRepository subscriptionChargeRepository;
   private final LiqPayProperties liqPayProperties;
   private final CartClient cartClient;
   private final OrderClient orderClient;
@@ -40,11 +46,13 @@ public class SubscriptionService {
 
   public SubscriptionService(
       SubscriptionRepository subscriptionRepository,
+      SubscriptionChargeRepository subscriptionChargeRepository,
       LiqPayProperties liqPayProperties,
       CartClient cartClient,
       OrderClient orderClient,
       @Value("${payment.subscription.register-in-liqpay}") boolean registerInLiqPay) {
     this.subscriptionRepository = subscriptionRepository;
+    this.subscriptionChargeRepository = subscriptionChargeRepository;
     this.liqPayProperties = liqPayProperties;
     this.cartClient = cartClient;
     this.orderClient = orderClient;
@@ -159,6 +167,43 @@ public class SubscriptionService {
         "Recurring order created from subscription {} for user {}",
         subscription.getId(),
         subscription.getUserId());
+  }
+
+  // One scheduled (emulated) recurring charge per (subscription, period). The guard row and the
+  // downstream order commit or roll back together: insert-FIRST so a second tick for the same
+  // period blocks on the primary key and fails before it can create a duplicate order; if the
+  // order call fails the guard rolls back too and the next tick retries. Same at-least-once
+  // stance as the callback path (processed_callback): for billing a missed charge is worse than
+  // a rare duplicate, which is visible and refundable.
+  @Transactional
+  public void chargeForPeriod(Subscription subscription, LocalDateTime now) {
+    String chargeId = subscription.getId() + "#" + periodKey(subscription.getPeriodicity(), now);
+    if (subscriptionChargeRepository.existsById(chargeId)) {
+      logger.info(
+          "Subscription {} already charged for period {} — skipping",
+          subscription.getId(),
+          chargeId);
+      return;
+    }
+    subscriptionChargeRepository.saveAndFlush(new SubscriptionCharge(chargeId));
+    // no LiqPay payment_id in emulation mode — the (subscription, period) key is the guard instead
+    createOrderFromSubscription(subscription, null);
+  }
+
+  // calendar bucket the charge belongs to, aligned to the cron tick: one key per billing period
+  // so the same period charges once and the next period gets a fresh key. Week uses the ISO
+  // week-based year so the turn of the year buckets correctly.
+  static String periodKey(String periodicity, LocalDateTime now) {
+    return switch (periodicity) {
+      case "day" -> now.toLocalDate().toString();
+      case "week" ->
+          "%d-W%02d"
+              .formatted(
+                  now.get(IsoFields.WEEK_BASED_YEAR), now.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR));
+      case "month" -> YearMonth.from(now).toString();
+      case "year" -> String.valueOf(now.getYear());
+      default -> throw new IllegalArgumentException("Unknown periodicity: " + periodicity);
+    };
   }
 
   // registers the recurring charge: LiqPay will debit the card on schedule

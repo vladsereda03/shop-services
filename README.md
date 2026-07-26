@@ -147,11 +147,18 @@ Design decisions and production-style bugs found and fixed along the way:
    at each service boundary. Found while wiring Zipkin; fixed by building from
    the injected auto-configured builder —
    [`RestClientConfig`](services/order/src/main/java/shop/order/config/RestClientConfig.java).
-6. **The 100k-character SpEL case.** Any product image over ~75 KB crashed the
-   catalog page with `EL1078E`: Thymeleaf's `+` concatenation is evaluated
-   through SpEL, which caps string literals at 100k characters — base64 images
-   walked right into the limit. Fixed with literal substitution (`|...|`) in
-   [`goods.html`](services/client/src/main/resources/templates/assortment/goods.html).
+6. **The 100k-character SpEL case — and retiring the workaround.** Any product
+   image over ~75 KB crashed the catalog page with `EL1078E`: Thymeleaf's `+`
+   concatenation runs through SpEL, which caps string literals at 100k characters,
+   and inline base64 images walked right into the limit. The tactical fix was
+   literal substitution (`|...|`); the strategic one (Р5) removed inline images
+   entirely. Bytes now live in an S3-compatible object store (MinIO) behind
+   [`ImageStorage`](services/product/src/main/java/shop/product/service/ImageStorage.java):
+   the catalog row keeps only an object key, the API returns a public URL, and the
+   browser loads the image straight from the bucket, so the payload stays small.
+   Legacy rows are drained from the old `image` bytea column by an idempotent
+   startup migration
+   ([`ImageBackfillRunner`](services/product/src/main/java/shop/product/service/ImageBackfillRunner.java)).
 7. **Observability paying off within the first hour.** The freshly added health
    endpoint reported auth as `DOWN`: a leftover `spring-data-redis` dependency
    had auto-registered a Redis health indicator pointing at a Redis that never
@@ -209,6 +216,30 @@ Design decisions and production-style bugs found and fixed along the way:
     `spring-security-web`, fixed by the Spring Boot 3.5.16 patch bump before
     the gate ever ran in CI. Neither finding came from a code review —
     guardrails earn their place by failing.
+13. **A poison message can't wedge the cart consumer.** The `user-registered`
+    consumer deserializes straight into a typed event; a malformed record used to
+    throw *before* the listener and, with no error handling, be retried forever —
+    stalling the partition and every well-formed event queued behind it. The
+    consumer now decodes through an `ErrorHandlingDeserializer`, and a
+    `DefaultErrorHandler` with a `DeadLetterPublishingRecoverer` routes an
+    un-decodable record to a `user-registered-events-topic-dlt` dead-letter topic
+    (Spring Kafka's default `-dlt` suffix) after a bounded retry, so the partition
+    keeps moving and an operator can inspect what failed
+    ([`KafkaErrorConfig`](services/cart/src/main/java/shop/cart/config/KafkaErrorConfig.java)).
+    An integration test feeds raw garbage bytes to the topic and asserts both that
+    they land in the dead-letter topic and that a valid event right behind them
+    still provisions its cart.
+14. **Idempotent recurring charges without a `payment_id`.** The callback path
+    deduplicates on LiqPay's `payment_id` (highlight 3), but the scheduled charge
+    emulator has no such id — a missed tick replayed on the next run, a restart, or
+    a second instance would each create a duplicate order. Every scheduled charge
+    now writes a guard row keyed `<subscriptionId>#<periodKey>` — the calendar
+    period the tick falls in (ISO date, ISO week, month or year) — *before* creating
+    the order and in the same transaction, so a repeated tick for the same period is
+    a no-op while the next period charges normally
+    ([`SubscriptionService`](services/payment/src/main/java/shop/payment/service/SubscriptionService.java)).
+    It mirrors the callback guard exactly — insert-first, at-least-once: a rare
+    duplicate is visible and refundable, a silently dropped charge is not.
 
 ## Getting started
 
@@ -327,18 +358,45 @@ Notes:
 
 ## Observability
 
-Every service exposes health probes and metrics via Spring Boot Actuator +
-Micrometer: `/actuator/health` (used by the compose healthchecks) and
-`/actuator/prometheus` are open anonymously, the rest of the management
-surface stays closed. The compose stack ships the monitoring/tracing trio:
+All three pillars — metrics, traces and logs — are wired up, and the compose
+stack ships the tools that consume them. Every service exposes health probes
+and metrics via Spring Boot Actuator + Micrometer: `/actuator/health` (used by
+the compose healthchecks) and `/actuator/prometheus` are open anonymously, the
+rest of the management surface stays closed.
 
 | Tool | URL | Purpose |
 |---|---|---|
-| Prometheus | http://localhost:9090 | scrapes `/actuator/prometheus` of all six services every 15s (`infra/docker/prometheus/prometheus.yml`); targets carry an `application` label |
-| Grafana | http://localhost:3000 (`admin`/`admin`) | Prometheus datasource provisioned from `infra/docker/grafana/provisioning`; import dashboard `4701` (JVM Micrometer) and switch services via the `application` variable |
+| Prometheus | http://localhost:9090 | scrapes `/actuator/prometheus` of all six services every 15s (`infra/docker/prometheus/prometheus.yml`); targets carry an `application` label; evaluates the alerting rules below |
+| Grafana | http://localhost:3000 (`admin`/`admin`) | Prometheus **and** Loki datasources provisioned from `infra/docker/grafana/provisioning`; import dashboard `4701` (JVM Micrometer) and switch services via the `application` variable |
 | Zipkin | http://localhost:9411 | distributed trace storage and UI |
+| Loki | http://localhost:3100 | log storage, queried from Grafana's Explore |
+| Alloy | http://localhost:12345 | log collector: tails the containers' stdout and ships it to Loki (Grafana's current agent — Promtail is end-of-life) |
 
 ![Grafana JVM (Micrometer) dashboard](docs/images/grafana-jvm.jpg)
+
+### Metrics & alerting
+
+Prometheus evaluates a small set of alerting rules
+([`infra/docker/prometheus/alerts.yml`](infra/docker/prometheus/alerts.yml)),
+visible under **Status → Rules** and the **Alerts** tab:
+
+- **InstanceDown** — a service target stops responding to scrapes.
+- **HighServerErrorRate** — over 5% `5xx` responses on a service (5-minute window).
+- **CircuitBreakerOpen** — a Resilience4j breaker has tripped, so a neighbour leg
+  is failing.
+- **OutboxRelayStalled** — auth's oldest *unpublished* outbox event keeps ageing
+  past 60s: the Kafka relay has stalled and new users may stop getting carts.
+  The age is a custom Micrometer gauge (`outbox_unpublished_age_seconds`).
+- **KafkaConsumerLagHigh** — cart is falling behind on the `user-registered`
+  topic. The Kafka client's native lag metric is exported by attaching a
+  `MicrometerConsumerListener` to the consumer factory, which Boot does not do
+  on its own.
+
+There is **no Alertmanager** on purpose: a demo has no real notification channel,
+so routing and silencing would be ceremony — the firing rules in Prometheus and
+Grafana are the useful part.
+
+### Tracing
 
 Distributed tracing uses Micrometer Tracing with the Brave bridge: spans cover
 incoming HTTP, outgoing `RestClient` calls and the Kafka leg (auth → cart);
@@ -346,15 +404,28 @@ the W3C `traceparent` header propagates the trace across service boundaries,
 and spans are reported to Zipkin (100% sampling — a demo setting; production
 would sample a few percent). A checkout shows up as a single
 client → order → cart waterfall (adding an item to the cart traces
-client → cart → product through the stock reservation). Logs carry a
-`[service,traceId,spanId]` prefix, so a trace found in Zipkin can be grepped
-across `docker logs` of any service.
+client → cart → product through the stock reservation).
 
 ![Zipkin checkout trace](docs/images/zipkin-trace.jpg)
 
+### Logs
+
+In the compose stack each service logs **structured JSON** in the Elastic Common
+Schema (Spring Boot's native `logging.structured.format.console=ecs`, enabled by
+an environment variable — a host-mode `java -jar` run keeps the human-readable
+console format). **Alloy** tails the containers' stdout and ships the lines to
+**Loki**, so all six services' logs are searchable together from Grafana's
+Explore view (e.g. `{service="order"}`).
+
+Because the logs are structured, the `traceId` is a real field rather than text:
+Grafana's Loki datasource carries a **derived field** that turns it into a link
+straight to the matching **Zipkin** trace — one click from a log line to its
+distributed trace, closing the loop between the three pillars.
+
 In host mode the metrics endpoints work as-is and spans are sent to
 `http://localhost:9411` — start the Zipkin container if traces are wanted; a
-missing Zipkin is harmless (spans are dropped with a warning).
+missing Zipkin is harmless (spans are dropped with a warning). Loki and Alloy
+are part of the compose stack only.
 
 ## API documentation
 
@@ -393,8 +464,8 @@ uploads all of them as the `jacoco-coverage` artifact.
 
 - **Unit tests** (no infrastructure needed): LiqPay callback processing in
   `payment` (signature verification, duplicate callbacks, status handling),
-  subscription creation ordering and rollback in `payment`, catalog validation
-  and stock reserve/release in `product`.
+  subscription creation ordering and rollback plus per-period charge idempotency
+  in `payment`, catalog validation and stock reserve/release in `product`.
 - **Architecture tests** (ArchUnit, run with the unit tests): layered
   architecture — `controller → service → repository`, nothing reaches around
   the service layer — plus no field injection and no `System.out` /
@@ -407,8 +478,9 @@ uploads all of them as the `jacoco-coverage` artifact.
     event to a transactional outbox, which the scheduled publisher relays to the
     real Kafka broker and stamps published; an outbox write outside a transaction
     is rejected. Plus token issuing and JWKS smoke tests.
-  - `cart` — Kafka-driven cart provisioning, stock reservation with transaction
-    rollback on conflict, resource-server security rules.
+  - `cart` — Kafka-driven cart provisioning (including a poison record that
+    dead-letters without wedging the partition), stock reservation with
+    transaction rollback on conflict, resource-server security rules.
   - `order` — checkout turns the cart into an order and rolls back when the
     cart cannot be cleared; scope-protected internal API.
   - `payment` — subscription snapshot persistence and rollback, the recurring
@@ -466,13 +538,21 @@ default: daily/weekly/monthly/yearly at 15:00).
 
 - No distributed transactions between services: operation ordering minimizes the
   damage window (local writes first, external calls last). The auth → cart
-  `user-registered` event is now delivered through a transactional outbox
-  (highlight 11), but the checkout and payment flows still rely on ordering
-  alone; sagas with compensation there are future work.
+  `user-registered` event is delivered through a transactional outbox (highlight
+  11) whose consumer dead-letters poison messages (highlight 13), and recurring
+  subscription charges are deduplicated per period (highlight 14). The checkout
+  flow, though, still relies on ordering alone; sagas with compensation there are
+  future work.
 - Secrets come from the environment — DB credentials, the JWT signing keys, LiqPay
   keys and the OAuth2 client secrets — with dev defaults baked in for a one-command
   local run and overridable in production. The committed dev defaults are demo
   credentials, not real ones.
+- Product images live in an S3-compatible bucket served public-read: no CDN and no
+  signed URLs (adequate for public catalog assets; a CDN or a cloud object store
+  slots in behind the same URL in Kubernetes). The drained legacy `image` bytea
+  column is left in place — its physical `DROP` is a follow-up contract migration,
+  kept separate from the backfill because Flyway migrations run before the migration
+  runner that reads the column.
 - Planned next: Kubernetes deployment (Helm chart, actuator-driven
   liveness/readiness probes, HPA). An API gateway is deliberately not on the
   roadmap: the client BFF is already the single browser-facing entry point, and
@@ -484,8 +564,10 @@ default: daily/weekly/monthly/yearly at 15:00).
 libs/contracts/           shared event contracts
 services/<name>/          one Spring Boot app per service
 infra/docker/kafka/       Kafka cluster for local development
-infra/docker/prometheus/  Prometheus scrape configuration
-infra/docker/grafana/     Grafana provisioning (datasource)
+infra/docker/prometheus/  Prometheus scrape config + alerting rules
+infra/docker/grafana/     Grafana provisioning (Prometheus + Loki datasources)
+infra/docker/loki/        Loki log-storage configuration
+infra/docker/alloy/       Alloy log-collector configuration
 scripts/                  development utilities (LiqPay callback emulator)
 docs/images/              README screenshots
 ```

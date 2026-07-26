@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -36,7 +37,9 @@ import shop.payment.client.CartClient;
 import shop.payment.client.OrderClient;
 import shop.payment.config.LiqPayProperties;
 import shop.payment.model.Subscription;
+import shop.payment.model.SubscriptionCharge;
 import shop.payment.model.dto.SubscriptionForm;
+import shop.payment.repository.SubscriptionChargeRepository;
 import shop.payment.repository.SubscriptionRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -47,6 +50,7 @@ class SubscriptionServiceTest {
   private static final long USER_ID = 42L;
 
   @Mock private SubscriptionRepository subscriptionRepository;
+  @Mock private SubscriptionChargeRepository subscriptionChargeRepository;
 
   private MockRestServiceServer server;
   private SubscriptionService subscriptionService;
@@ -64,6 +68,7 @@ class SubscriptionServiceTest {
     subscriptionService =
         new SubscriptionService(
             subscriptionRepository,
+            subscriptionChargeRepository,
             new LiqPayProperties("test_public_key", "test_private_key"),
             cartClient,
             orderClient,
@@ -176,6 +181,95 @@ class SubscriptionServiceTest {
     server.verify();
   }
 
+  // --- chargeForPeriod (scheduler idempotency) ---
+
+  @Test
+  void secondTickForTheSamePeriodChargesOnlyOnce() {
+    Subscription subscription = monthlySubscription();
+    LocalDateTime tick = LocalDateTime.of(2026, 7, 15, 12, 0);
+    // first tick finds an empty guard, the second finds the row the first one wrote
+    when(subscriptionChargeRepository.existsById("77#2026-07")).thenReturn(false, true);
+    // exactly one order is expected across both ticks — a second POST would be an unexpected request
+    server
+        .expect(requestTo(ORDER_BASE_URL + "/internal/orders/" + USER_ID))
+        .andExpect(method(HttpMethod.POST))
+        .andExpect(content().json("[{\"goodId\":5,\"quantity\":2,\"priceKopeck\":1500}]", true))
+        .andRespond(withSuccess());
+
+    subscriptionService.chargeForPeriod(subscription, tick);
+    subscriptionService.chargeForPeriod(subscription, tick);
+
+    server.verify();
+    ArgumentCaptor<SubscriptionCharge> captor = ArgumentCaptor.forClass(SubscriptionCharge.class);
+    verify(subscriptionChargeRepository).saveAndFlush(captor.capture());
+    assertThat(captor.getValue().getId()).isEqualTo("77#2026-07");
+  }
+
+  @Test
+  void eachBillingPeriodCreatesItsOwnOrder() {
+    Subscription subscription = monthlySubscription();
+    // both periods start with an empty guard, so both charge
+    when(subscriptionChargeRepository.existsById("77#2026-07")).thenReturn(false);
+    when(subscriptionChargeRepository.existsById("77#2026-08")).thenReturn(false);
+    server
+        .expect(requestTo(ORDER_BASE_URL + "/internal/orders/" + USER_ID))
+        .andExpect(method(HttpMethod.POST))
+        .andRespond(withSuccess());
+    server
+        .expect(requestTo(ORDER_BASE_URL + "/internal/orders/" + USER_ID))
+        .andExpect(method(HttpMethod.POST))
+        .andRespond(withSuccess());
+
+    subscriptionService.chargeForPeriod(subscription, LocalDateTime.of(2026, 7, 15, 12, 0));
+    subscriptionService.chargeForPeriod(subscription, LocalDateTime.of(2026, 8, 15, 12, 0));
+
+    server.verify();
+    ArgumentCaptor<SubscriptionCharge> captor = ArgumentCaptor.forClass(SubscriptionCharge.class);
+    verify(subscriptionChargeRepository, times(2)).saveAndFlush(captor.capture());
+    assertThat(captor.getAllValues())
+        .extracting(SubscriptionCharge::getId)
+        .containsExactly("77#2026-07", "77#2026-08");
+  }
+
+  @Test
+  void alreadyChargedPeriodCreatesNoOrder() {
+    Subscription subscription = monthlySubscription();
+    when(subscriptionChargeRepository.existsById("77#2026-07")).thenReturn(true);
+    // no server expectations set: any outbound order request would fail the test
+
+    subscriptionService.chargeForPeriod(subscription, LocalDateTime.of(2026, 7, 15, 12, 0));
+
+    server.verify();
+    verify(subscriptionChargeRepository, never()).saveAndFlush(any());
+  }
+
+  // --- periodKey ---
+
+  @Test
+  void periodKeyBucketsByCalendarPeriod() {
+    LocalDateTime t = LocalDateTime.of(2026, 7, 15, 12, 30);
+    assertThat(SubscriptionService.periodKey("day", t)).isEqualTo("2026-07-15");
+    assertThat(SubscriptionService.periodKey("month", t)).isEqualTo("2026-07");
+    assertThat(SubscriptionService.periodKey("year", t)).isEqualTo("2026");
+  }
+
+  @Test
+  void periodKeyUsesTheIsoWeekBasedYearAtTheTurnOfTheYear() {
+    // 2026-01-01 is a Thursday, so ISO week 1 of week-based-year 2026 runs Mon 2025-12-29..Sun
+    // 2026-01-04. A naive calendar year would split this one week across "2025" and "2026" keys
+    // and charge it twice.
+    assertThat(SubscriptionService.periodKey("week", LocalDateTime.of(2025, 12, 29, 23, 0)))
+        .isEqualTo("2026-W01");
+    assertThat(SubscriptionService.periodKey("week", LocalDateTime.of(2026, 1, 4, 10, 0)))
+        .isEqualTo("2026-W01");
+  }
+
+  @Test
+  void periodKeyRejectsUnknownPeriodicity() {
+    assertThatExceptionOfType(IllegalArgumentException.class)
+        .isThrownBy(() -> SubscriptionService.periodKey("fortnight", LocalDateTime.now()));
+  }
+
   // --- cancel ---
 
   @Test
@@ -224,6 +318,15 @@ class SubscriptionServiceTest {
 
     assertThat(result).isSameAs(alreadyCancelled);
     verify(subscriptionRepository, never()).save(any());
+  }
+
+  private static Subscription monthlySubscription() {
+    return Subscription.builder()
+        .id(77L)
+        .userId(USER_ID)
+        .periodicity("month")
+        .items(Map.of(5L, new Subscription.SubscriptionItem(2, 1500L)))
+        .build();
   }
 
   private static SubscriptionForm validForm() {

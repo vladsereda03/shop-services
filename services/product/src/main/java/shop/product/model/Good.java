@@ -3,7 +3,6 @@ package shop.product.model;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.io.Serializable;
-import java.util.Base64;
 import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
@@ -27,7 +26,12 @@ public class Good implements Serializable {
   @Column(name = "category", columnDefinition = "TEXT")
   private String category;
 
-  private byte[] image;
+  // key of the image object in the S3/MinIO bucket (Р5): image bytes live in object storage. The
+  // legacy `image` bytea column is intentionally no longer mapped here — it has been drained by
+  // ImageBackfillRunner and is dropped in a later "contract" migration (Hibernate `validate`
+  // tolerates the unmapped column in the meantime).
+  @Column(name = "image_key", columnDefinition = "text")
+  private String imageKey;
 
   @Access(AccessType.FIELD)
   @ManyToMany(fetch = FetchType.EAGER)
@@ -46,13 +50,11 @@ public class Good implements Serializable {
       long priceKopeck,
       String description,
       String category,
-      byte[] image,
       List<Manufacturer> manufacturers) {
     this.name = name;
     this.priceKopeck = priceKopeck;
     this.description = description;
     this.category = category;
-    this.image = image;
     this.manufacturers = manufacturers;
   }
 
@@ -60,11 +62,5 @@ public class Good implements Serializable {
   @JsonIgnore
   public double getPriceGrn() {
     return (double) (priceKopeck) / 100;
-  }
-
-  @Transient
-  @JsonIgnore
-  public String getImageBase64() {
-    return Base64.getEncoder().encodeToString(image);
   }
 }

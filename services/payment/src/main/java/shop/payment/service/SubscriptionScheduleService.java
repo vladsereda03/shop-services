@@ -43,15 +43,16 @@ public class SubscriptionScheduleService {
   }
 
   private void charge(String periodicity) {
+    LocalDateTime now = LocalDateTime.now();
     List<Subscription> due =
         subscriptionRepository.findByPeriodicityAndStartDateBeforeAndCancelledAtIsNull(
-            periodicity, LocalDateTime.now());
+            periodicity, now);
     logger.info("Scheduled '{}' run: {} subscription(s) due", periodicity, due.size());
 
     for (Subscription subscription : due) {
       try {
-        // no LiqPay payment_id in emulation mode — each scheduled charge is a distinct order
-        subscriptionService.createOrderFromSubscription(subscription, null);
+        // idempotent per (subscription, period): a repeated tick for the same period is a no-op
+        subscriptionService.chargeForPeriod(subscription, now);
       } catch (Exception e) {
         // one broken subscription must not stop the rest of the run
         logger.error("Recurring order failed for subscription {}", subscription.getId(), e);

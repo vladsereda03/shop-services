@@ -1,0 +1,71 @@
+# Alerting rules evaluated by Prometheus itself. There is no Alertmanager in this
+# stack on purpose: a demo has no real notification channel (Slack/PagerDuty), so
+# routing/silencing would be ceremony. Firing rules are visible in the Prometheus
+# UI (Status → Rules, and the Alerts tab) and can be graphed in Grafana.
+groups:
+  - name: shop-service-health
+    rules:
+      # The most fundamental signal: Prometheus cannot scrape a target. `up` is
+      # synthesised by Prometheus for every target, so this can never be a no-op.
+      - alert: InstanceDown
+        expr: up{job="shop-services"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.application }} is down"
+          description: "Prometheus has failed to scrape {{ $labels.application }} ({{ $labels.instance }}) for 1m."
+
+      # Share of 5xx responses over all responses, per service, 5-minute window.
+      # When a service serves no traffic the ratio is absent (0/0), so a quiet
+      # service never trips this.
+      - alert: HighServerErrorRate
+        expr: |
+          sum by (application) (rate(http_server_requests_seconds_count{status=~"5.."}[5m]))
+            / sum by (application) (rate(http_server_requests_seconds_count[5m]))
+            > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 5xx rate on {{ $labels.application }}"
+          description: "{{ $labels.application }} is serving more than 5% 5xx responses (5m average)."
+
+  - name: shop-resilience
+    rules:
+      # resilience4j exports the breaker state as a gauge that is 1 for the current
+      # state; an open breaker means a neighbour leg has been failing and calls are
+      # being short-circuited.
+      - alert: CircuitBreakerOpen
+        expr: resilience4j_circuitbreaker_state{state="open"} == 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Circuit breaker '{{ $labels.name }}' open on {{ $labels.application }}"
+          description: "The '{{ $labels.name }}' circuit breaker on {{ $labels.application }} has been open for 1m — its downstream dependency is failing."
+
+  - name: shop-async-reliability
+    rules:
+      # Producer side: the outbox relay has stalled if the oldest unpublished event keeps
+      # ageing. The poller runs every ~1s, so 60s means it has missed ~60 cycles — new
+      # users would stop getting their carts provisioned. (Custom gauge in auth.)
+      - alert: OutboxRelayStalled
+        expr: outbox_unpublished_age_seconds > 60
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "auth outbox relay is falling behind"
+          description: "The oldest unpublished outbox event in auth has been older than 60s for 2m — the Kafka relay looks stalled, so new users may not be getting carts."
+
+      # Consumer side: the cart consumer is falling behind on the user-registered topic.
+      # (Kafka client lag metric, exported via the MicrometerConsumerListener in cart.)
+      - alert: KafkaConsumerLagHigh
+        expr: max by (application) (kafka_consumer_fetch_manager_records_lag) > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "cart consumer lag is high"
+          description: "The cart consumer is more than 50 records behind for 5m — user-registered events are not being processed fast enough."

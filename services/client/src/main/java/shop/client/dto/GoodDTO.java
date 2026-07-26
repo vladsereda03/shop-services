@@ -1,6 +1,5 @@
 package shop.client.dto;
 
-import java.util.Base64;
 import java.util.List;
 import lombok.*;
 
@@ -14,7 +13,8 @@ public class GoodDTO {
   private long priceKopeck;
   private String description;
   private String category;
-  private byte[] image;
+  // public object-storage URL of the image; the browser fetches the bytes from object storage
+  private String imageUrl;
 
   private List<ManufacturerDTO> manufacturers;
 
@@ -22,9 +22,5 @@ public class GoodDTO {
 
   public double getPriceGrn() {
     return (double) (priceKopeck) / 100;
-  }
-
-  public String getImageBase64() {
-    return image == null ? "" : Base64.getEncoder().encodeToString(image);
   }
 }

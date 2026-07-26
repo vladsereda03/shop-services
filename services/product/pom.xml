@@ -78,6 +78,12 @@
             <scope>runtime</scope>
         </dependency>
         <dependency>
+            <!-- S3 client for object storage (MinIO): product image bytes live in a bucket,
+                 not in the catalog JSON payload -->
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
@@ -113,6 +119,12 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- real MinIO in a container for the object-storage round-trip test -->
+            <groupId>org.testcontainers</groupId>
+            <artifactId>minio</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

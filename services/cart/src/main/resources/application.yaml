@@ -40,12 +40,22 @@ spring:
   kafka:
     bootstrap-servers: localhost:29092, localhost:39092, localhost:49092
     consumer:
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      # wrap the real deserializers in ErrorHandlingDeserializer: a message that fails to
+      # deserialize (a "poison pill") then surfaces as a handled error the DefaultErrorHandler
+      # can dead-letter, instead of being retried forever inside the poll and blocking the partition
+      key-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       group-id: cart-service
       properties:
+        spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
         spring.json.trusted.packages: shop.event
       auto-offset-reset: earliest
+    producer:
+      # the only thing this service produces is the dead-letter record; JSON matches the
+      # inbound event shape and safely re-serialises the raw bytes of a poison message too
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
     listener:
       # continue the trace carried in record headers instead of starting a new one
       observation-enabled: true

@@ -1,6 +1,7 @@
 package shop.product;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -32,8 +33,11 @@ import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.server.ResponseStatusException;
+import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -41,6 +45,7 @@ import shop.product.model.Good;
 import shop.product.model.Manufacturer;
 import shop.product.repository.GoodRepository;
 import shop.product.repository.ManufacturerRepository;
+import shop.product.service.ImageStorage;
 import shop.product.service.ProductService;
 
 // full-context integration test: real PostgreSQL in a container. Requests carry real
@@ -58,6 +63,19 @@ class ProductIT {
   @Container @ServiceConnection
   static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
 
+  @Container
+  static MinIOContainer minio = new MinIOContainer("minio/minio:RELEASE.2025-01-20T14-49-07Z");
+
+  // point the object-storage client at the throwaway MinIO; the startup initializer creates the
+  // bucket there, so the create-good path can PUT and read back through the real client
+  @DynamicPropertySource
+  static void storageProperties(DynamicPropertyRegistry registry) {
+    registry.add("app.storage.endpoint", minio::getS3URL);
+    registry.add("app.storage.access-key", minio::getUserName);
+    registry.add("app.storage.secret-key", minio::getPassword);
+    registry.add("app.storage.public-base-url", () -> minio.getS3URL() + "/product-images");
+  }
+
   @Autowired private MockMvc mockMvc;
 
   @Autowired private GoodRepository goodRepository;
@@ -65,6 +83,8 @@ class ProductIT {
   @Autowired private ManufacturerRepository manufacturerRepository;
 
   @Autowired private ProductService productService;
+
+  @Autowired private ImageStorage imageStorage;
 
   @BeforeEach
   void cleanUp() {
@@ -134,13 +154,18 @@ class ProductIT {
                             bela.getId())))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.name").value("Конструктор"))
-        .andExpect(jsonPath("$.manufacturers.length()").value(2));
+        .andExpect(jsonPath("$.manufacturers.length()").value(2))
+        // the response carries the public object-storage URL instead of inline image bytes
+        .andExpect(jsonPath("$.imageUrl", containsString("/product-images/")));
 
     List<Good> goods = goodRepository.findAll();
     assertThat(goods).hasSize(1);
-    assertThat(goods.getFirst().getImage()).isEqualTo(imageBytes);
+    Good created = goods.getFirst();
+    // the bytes went to object storage, not the row — only the key remains, and it round-trips
+    assertThat(created.getImageKey()).isNotNull();
+    assertThat(imageStorage.get(created.getImageKey())).isEqualTo(imageBytes);
     // the many-to-many join survived a round-trip through the real schema
-    assertThat(goods.getFirst().getManufacturers())
+    assertThat(created.getManufacturers())
         .extracting(Manufacturer::getName)
         .containsExactlyInAnyOrder("Lego", "Bela");
   }
@@ -243,7 +268,7 @@ class ProductIT {
   // --- helpers ---
 
   private Good seedGood(int quantity) {
-    Good good = new Good("Конструктор", 129900L, "description", "toys", null, List.of());
+    Good good = new Good("Конструктор", 129900L, "description", "toys", List.of());
     good.setQuantity(quantity);
     return goodRepository.saveAndFlush(good);
   }

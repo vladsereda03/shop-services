@@ -49,6 +49,18 @@ management:
       # export every trace — demo setting; production typically samples 1-10%
       probability: 1.0
 
+# object storage (MinIO / any S3): product image bytes live in a bucket, not in the catalog
+# payload. `endpoint` is where product PUTs/GETs (host-published MinIO in host mode; the compose
+# stack overrides it to the internal minio:9000). `public-base-url` is what the browser fetches —
+# always the host-published address, since the browser runs on the host even in compose.
+app:
+  storage:
+    endpoint: http://localhost:9002
+    access-key: minioadmin
+    secret-key: minioadmin
+    bucket: product-images
+    public-base-url: http://localhost:9002/product-images
+
 ---
 # dev profile: verbose SQL logging for local runs (SPRING_PROFILES_ACTIVE=dev)
 spring:

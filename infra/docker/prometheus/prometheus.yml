@@ -5,6 +5,12 @@
 # scrape_interval and stores the samples in its embedded time-series DB.
 global:
   scrape_interval: 15s
+  # how often the alerting rules below are evaluated
+  evaluation_interval: 15s
+
+# alerting rules (evaluated locally; no Alertmanager — see the file header)
+rule_files:
+  - /etc/prometheus/alerts.yml
 
 scrape_configs:
   - job_name: shop-services

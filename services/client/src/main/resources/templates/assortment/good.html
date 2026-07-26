@@ -9,7 +9,7 @@
     <div class="banner banner-error" th:if="${cartError}" th:text="${cartError}"></div>
 
     <div class="card good-detail">
-        <img class="good-detail-photo" th:src="|data:image/jpg;base64,${good.imageBase64}|" alt="Фото товару">
+        <img class="good-detail-photo" th:src="${good.imageUrl}" alt="Фото товару">
 
         <div>
             <h1 th:text="${good.getName()}"></h1>

@@ -10,7 +10,7 @@
 
     <div class="goods-grid">
         <a class="good-card" th:each="good : ${goods}" th:href="@{/goods/{id}(id=${good.getId()})}">
-            <img th:src="|data:image/jpg;base64,${good.imageBase64}|" alt="Фото товару">
+            <img th:src="${good.imageUrl}" alt="Фото товару">
             <div class="good-card-body">
                 <div class="good-card-title" th:text="${good.getName()}"></div>
                 <div class="price" th:text="|${good.getPriceGrn()} грн|"></div>
