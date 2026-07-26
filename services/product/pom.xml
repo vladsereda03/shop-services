@@ -84,6 +84,13 @@
             <artifactId>s3</artifactId>
         </dependency>
         <dependency>
+            <!-- Redis-backed cache for the catalog read path (Р5). The cache abstraction itself
+                 comes from Spring core + @EnableCaching (see CacheConfig); this starter only adds
+                 the Lettuce client and the RedisCacheManager provider -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>

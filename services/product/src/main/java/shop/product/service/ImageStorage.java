@@ -26,8 +26,8 @@ public class ImageStorage {
   }
 
   // stores the bytes under a fresh random key and returns it. The Content-Type is sniffed from the
-  // magic bytes so the browser <img> gets a sensible type (the base64 upload boundary and the legacy
-  // bytea column both dropped the original MIME type).
+  // magic bytes so the browser <img> gets a sensible type; the upload boundary and legacy bytea
+  // column both dropped the original MIME type.
   public String put(byte[] bytes) {
     String key = UUID.randomUUID().toString();
     s3.putObject(

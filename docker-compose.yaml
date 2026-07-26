@@ -100,6 +100,8 @@ services:
       APP_STORAGE_ENDPOINT: http://minio:9000
       APP_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       APP_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      # catalog cache: reach the redis container (application.yaml defaults to localhost, host mode)
+      SPRING_DATA_REDIS_HOST: redis
       MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
     networks:
       default:
@@ -107,6 +109,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       minio: { condition: service_started }
+      redis: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8082 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"status\":\"UP\"' <&3"]
       interval: 10s
@@ -218,6 +221,21 @@ services:
     volumes:
       - shop_minio_data:/data
 
+  redis:
+    image: redis:7-alpine
+    container_name: shop-redis
+    ports:
+      # host 6379 for host-mode product and redis-cli inspection (host and compose modes never run
+      # at once, so this cannot clash with a host-mode Redis)
+      - "6379:6379"
+    volumes:
+      - shop_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   # --- observability ---
 
   prometheus:
@@ -317,3 +335,4 @@ volumes:
   shop_grafana_data:
   shop_loki_data:
   shop_minio_data:
+  shop_redis_data:

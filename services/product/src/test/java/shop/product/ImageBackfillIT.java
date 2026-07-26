@@ -17,11 +17,11 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import shop.product.service.ImageBackfillRunner;
 import shop.product.service.ImageStorage;
 
-// Proves the one-time data migration end to end against a real PostgreSQL + MinIO: a legacy row that
-// still carries image bytes in the `good.image` bytea column is drained into object storage, and a
-// second run is a no-op. The startup pass runs on an empty table (nothing to do); the test seeds a
-// legacy row with raw JDBC — the Good entity no longer maps `image`, so it cannot be inserted
-// through the repository — and drives the runner directly.
+// Proves the one-time data migration end to end against a real PostgreSQL + MinIO: a legacy row
+// still holding image bytes in the `good.image` bytea column is drained into object storage, and a
+// second run is a no-op. The startup pass runs on an empty table, so the test seeds a legacy row
+// with raw JDBC (the Good entity no longer maps `image`, so it cannot go through the repository)
+// and drives the runner directly.
 @SpringBootTest
 @Testcontainers
 class ImageBackfillIT {
@@ -52,7 +52,12 @@ class ImageBackfillIT {
     jdbc.update(
         "INSERT INTO good (name, description, category, image, price_kopeck, quantity)"
             + " VALUES (?, ?, ?, ?, ?, ?)",
-        "Legacy good", "d", "c", legacy, 1000L, 3);
+        "Legacy good",
+        "d",
+        "c",
+        legacy,
+        1000L,
+        3);
     Long id = jdbc.queryForObject("SELECT id FROM good WHERE name = ?", Long.class, "Legacy good");
 
     backfillRunner.run(null);

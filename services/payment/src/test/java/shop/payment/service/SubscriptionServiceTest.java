@@ -189,7 +189,8 @@ class SubscriptionServiceTest {
     LocalDateTime tick = LocalDateTime.of(2026, 7, 15, 12, 0);
     // first tick finds an empty guard, the second finds the row the first one wrote
     when(subscriptionChargeRepository.existsById("77#2026-07")).thenReturn(false, true);
-    // exactly one order is expected across both ticks — a second POST would be an unexpected request
+    // exactly one order is expected across both ticks — a second POST would be an unexpected
+    // request
     server
         .expect(requestTo(ORDER_BASE_URL + "/internal/orders/" + USER_ID))
         .andExpect(method(HttpMethod.POST))

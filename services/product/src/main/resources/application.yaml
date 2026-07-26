@@ -33,6 +33,16 @@ spring:
           issuer-uri: http://auth.local:9000
           jwk-set-uri: http://auth.local:9000/oauth2/jwks
 
+  data:
+    redis:
+      # catalog cache backend (host mode: a standalone Redis on localhost; the compose stack
+      # overrides the host to the `redis` container). Lettuce connects lazily.
+      host: localhost
+      port: 6379
+  cache:
+    # Redis-backed cache manager (see CacheConfig); explicit so the provider is unambiguous
+    type: redis
+
 management:
   endpoints:
     web:
@@ -60,6 +70,9 @@ app:
     secret-key: minioadmin
     bucket: product-images
     public-base-url: http://localhost:9002/product-images
+  cache:
+    # how long a cached catalog entry lives before it must be re-read from PostgreSQL
+    catalog-ttl: 10m
 
 ---
 # dev profile: verbose SQL logging for local runs (SPRING_PROFILES_ACTIVE=dev)
