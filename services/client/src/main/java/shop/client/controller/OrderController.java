@@ -8,12 +8,18 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.MediaType;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
+import org.springframework.security.oauth2.client.annotation.RegisteredOAuth2AuthorizedClient;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import reactor.core.publisher.Flux;
 import shop.client.dto.GoodDTO;
 import shop.client.dto.OrderDTO;
 
@@ -29,14 +35,17 @@ public class OrderController {
       DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm").withZone(ZoneId.systemDefault());
 
   private final RestClient restClient;
+  private final WebClient webClient;
   private final String orderBaseUrl;
   private final String productBaseUrl;
 
   public OrderController(
       RestClient restClient,
+      WebClient webClient,
       @Value("${services.order.base-url}") String orderBaseUrl,
       @Value("${services.product.base-url}") String productBaseUrl) {
     this.restClient = restClient;
+    this.webClient = webClient;
     this.orderBaseUrl = orderBaseUrl;
     this.productBaseUrl = productBaseUrl;
   }
@@ -80,6 +89,24 @@ public class OrderController {
 
     model.addAttribute("orders", views);
     return "order/all_orders";
+  }
+
+  // browser-facing SSE relay: streams the user's live-orders feed from the order service and
+  // re-emits it to the browser (which consumes it with EventSource). The access token is captured
+  // here, on the request thread where the security context is available, and passed as a static
+  // bearer header — so the reactive relay does not depend on thread-bound context. The token never
+  // reaches the browser (BFF pattern intact); the browser is authenticated by its session cookie.
+  @GetMapping(value = "/orders/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+  @ResponseBody
+  public Flux<OrderDTO> stream(@RegisteredOAuth2AuthorizedClient OAuth2AuthorizedClient client) {
+    String token = client.getAccessToken().getTokenValue();
+    return webClient
+        .get()
+        .uri(orderBaseUrl + "/orders/stream")
+        .accept(MediaType.TEXT_EVENT_STREAM)
+        .headers(headers -> headers.setBearerAuth(token))
+        .retrieve()
+        .bodyToFlux(OrderDTO.class);
   }
 
   @GetMapping("/orders/checkout")

@@ -1,0 +1,56 @@
+{{- range $name, $svc := .Values.services }}
+{{- $defaults := $.Values.defaults }}
+{{- $probes := $defaults.probes }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "shop.labels" (dict "name" $name "root" $) | nindent 4 }}
+spec:
+  replicas: {{ $svc.replicas | default $defaults.replicas }}
+  selector:
+    matchLabels:
+      {{- include "shop.selectorLabels" (dict "name" $name) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "shop.selectorLabels" (dict "name" $name) | nindent 8 }}
+    spec:
+      # the image already runs as the non-root `spring` user (see Dockerfile);
+      # enforce it at the pod level too
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: {{ $name }}
+          image: "{{ $.Values.image.repository }}/{{ $name }}:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $svc.port }}
+          # env (ConfigMap + Secret) is wired in sub-step 6.2
+          startupProbe:
+            httpGet:
+              path: {{ $probes.startup.path }}
+              port: http
+            failureThreshold: {{ $probes.startup.failureThreshold }}
+            periodSeconds: {{ $probes.startup.periodSeconds }}
+          livenessProbe:
+            httpGet:
+              path: {{ $probes.liveness.path }}
+              port: http
+            periodSeconds: {{ $probes.liveness.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ $probes.readiness.path }}
+              port: http
+            periodSeconds: {{ $probes.readiness.periodSeconds }}
+          resources:
+            {{- toYaml ($svc.resources | default $defaults.resources) | nindent 12 }}
+          # readOnlyRootFilesystem + a writable /tmp mount are added in the 6.5 hardening pass
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+{{- end }}

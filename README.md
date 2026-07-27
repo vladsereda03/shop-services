@@ -240,6 +240,34 @@ Design decisions and production-style bugs found and fixed along the way:
     ([`SubscriptionService`](services/payment/src/main/java/shop/payment/service/SubscriptionService.java)).
     It mirrors the callback guard exactly — insert-first, at-least-once: a rare
     duplicate is visible and refundable, a silently dropped charge is not.
+15. **A catalog cache that survives a purchase.** The catalog list is the hottest
+    read path, so it is cached in Redis
+    ([`CacheConfig`](services/product/src/main/java/shop/product/config/CacheConfig.java)).
+    The naive move — `@Cacheable` on the whole entity — would be evicted on every
+    `reserve`/`release`, since stock changes constantly, collapsing the hit rate under
+    exactly the load the cache is meant to absorb. Instead the cache holds a projection
+    *without* `quantity`, so a purchase never touches it and only a catalog change
+    (`createGood`) evicts it; live availability is served fresh by the uncached
+    per-item endpoint
+    ([`ProductService`](services/product/src/main/java/shop/product/service/ProductService.java)).
+    Values are stored as JSON (readable in `redis-cli`, portable across instances) with
+    a TTL backstop, and RedisCache statistics are exported to Prometheus as
+    `cache_gets{result="hit"|"miss"}`.
+16. **Live orders without polling — a targeted reactive shoulder on the servlet stack.**
+    The orders page updates in real time: an order created by an *asynchronous* source —
+    a LiqPay payment callback (highlight 3) or a scheduled recurring charge (highlight 14) —
+    shows up the moment it commits, with no refresh and no polling. Rather than migrate a
+    service to WebFlux (the auth server is servlet-only, and virtual threads already make
+    the blocking paths cheap), the streaming is a *targeted* reactive shoulder: `order`
+    emits each committed order onto a Reactor `Sinks.Many` from an
+    `@TransactionalEventListener` — so a rolled-back checkout never emits a phantom — and
+    serves it as a `Flux` over `text/event-stream`
+    ([`OrderStreamService`](services/order/src/main/java/shop/order/service/OrderStreamService.java)).
+    Spring MVC adapts the `Flux` to SSE once Reactor is on the classpath, with no reactive
+    server. The `client` BFF relays the stream to the browser with a reactive `WebClient`,
+    capturing the user's token on the request thread so it never reaches the browser (BFF
+    intact) and the reactive chain needs no thread-bound context; the browser consumes it
+    with a plain `EventSource`.
 
 ## Getting started
 
@@ -251,7 +279,8 @@ Design decisions and production-style bugs found and fixed along the way:
   `carts`, `orders`, `payments` — each service creates and versions its schema
   with [Flyway](https://flywaydb.org/) migrations on startup (`ddl-auto` is set
   to `validate`; a pre-existing database is baselined automatically)
-- Docker (for Kafka and the Testcontainers-based integration tests)
+- Docker (for Kafka, the MinIO object store and Redis cache the `product` service
+  needs, and the Testcontainers-based integration tests)
 
 ### 1. Hosts entries
 
@@ -273,14 +302,29 @@ OIDC issuer to match), add to your hosts file:
 | `LIQPAY_PUBLIC_KEY` / `LIQPAY_PRIVATE_KEY` | payment | `sandbox_public_key` / `sandbox_private_key` | LiqPay merchant keys; sandbox keys from your LiqPay account are needed only to render the real payment form |
 | `LIQPAY_SUBSCRIBE_ENABLED` | payment | `false` | Register subscriptions in the LiqPay API. Keep `false` with sandbox keys — the LiqPay sandbox does not support subscriptions, so the built-in scheduler emulates recurring charges instead |
 
-### 3. Kafka
+### 3. Infrastructure: Kafka, object storage, cache
+
+Kafka — needed for user registration (auth publishes an event, cart provisions
+the user's cart):
 
 ```
 docker compose -f infra/docker/kafka/docker-compose.yaml up -d
 ```
 
-Brokers are exposed on `localhost:29092/39092/49092`. Kafka is needed for user
-registration (auth publishes an event, cart provisions the user's cart).
+Brokers are exposed on `localhost:29092/39092/49092`.
+
+The `product` service also needs an S3-compatible object store for images and a
+Redis for the catalog cache:
+
+```
+docker run -d -p 9002:9000 -p 9003:9001 --name shop-minio \
+  minio/minio:RELEASE.2025-01-20T14-49-07Z server /data --console-address ":9001"
+docker run -d -p 6379:6379 --name shop-redis redis:7-alpine
+```
+
+Both use the `application.yaml` defaults (MinIO `minioadmin`/`minioadmin` on
+`localhost:9002`, Redis on `localhost:6379`); `product` creates its public-read
+image bucket on startup.
 
 ### 4. Build and run
 
@@ -427,6 +471,32 @@ In host mode the metrics endpoints work as-is and spans are sent to
 missing Zipkin is harmless (spans are dropped with a warning). Loki and Alloy
 are part of the compose stack only.
 
+## Performance
+
+The Р5 data track targets the catalog read path — the hottest endpoint, exercised
+by the k6 harness in [`infra/k6`](infra/k6). Two changes attack two different costs:
+
+- **Payload.** Product images left the JSON. `GET /api/products` used to carry every
+  image inline (a ~50 KB base64 blob per item, decoded from a `bytea` column); the
+  bytes now live in object storage and the list carries only a URL, so `data_received`
+  collapses to the JSON weight (highlights 6, 15).
+- **Latency.** The catalog list is served from the Redis cache, so repeated reads skip
+  PostgreSQL entirely; only a catalog change evicts it and a purchase never does
+  (highlight 15).
+
+Reproduce the before/after with the harness — baseline on a pre-Р5 build, then the
+current build; the protocol and seed are in
+[`infra/k6/README.md`](infra/k6/README.md). Local run, 50 goods, 50 VUs:
+
+| Metric | Baseline (inline images, no cache) | After (object storage + Redis) |
+|---|---|---|
+| `http_req_duration` p95 | _tbd_ | _tbd_ |
+| `http_req_duration` p99 | _tbd_ | _tbd_ |
+| `data_received` (per full-catalog GET) | _tbd_ | _tbd_ |
+
+> Load-test numbers are machine-specific; the table is filled from a local run of the
+> harness above rather than baked in.
+
 ## API documentation
 
 Each API service generates a live OpenAPI 3 document from its controllers at
@@ -553,6 +623,12 @@ default: daily/weekly/monthly/yearly at 15:00).
   column is left in place — its physical `DROP` is a follow-up contract migration,
   kept separate from the backfill because Flyway migrations run before the migration
   runner that reads the column.
+- The live-orders SSE feed (highlight 16) fans out through an in-memory Reactor sink, so
+  it is single-instance: with more than one `order` replica, a browser streamed from one
+  replica would miss an order committed on another. Fine for the demo; a multi-replica
+  deployment would back the fan-out with a shared bus (e.g. Redis Pub/Sub) — which pairs
+  naturally with the Kubernetes work below (long-lived SSE connections also want
+  Ingress/readiness that account for streaming).
 - Planned next: Kubernetes deployment (Helm chart, actuator-driven
   liveness/readiness probes, HPA). An API gateway is deliberately not on the
   roadmap: the client BFF is already the single browser-facing entry point, and

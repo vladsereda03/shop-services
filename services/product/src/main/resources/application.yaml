@@ -42,6 +42,12 @@ spring:
   cache:
     # Redis-backed cache manager (see CacheConfig); explicit so the provider is unambiguous
     type: redis
+    # declare the cache up front so Micrometer binds its hit/miss metrics at startup — a lazily
+    # created cache would export nothing until first use
+    cache-names: catalog
+    redis:
+      # RedisCache collects no statistics by default, so cache.gets{result} would stay zero
+      enable-statistics: true
 
 management:
   endpoints:

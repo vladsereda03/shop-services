@@ -40,6 +40,28 @@ k6 run -e BASE_URL_PRODUCT=http://localhost:8082 -e BASE_URL_AUTH=http://auth.lo
   `k6_http_req_duration`); build a panel or import a k6 dashboard against the Prometheus
   datasource.
 
+## 4. Before / after comparison
+
+The Р5 optimisations change the catalog read path, so the two measurements must be taken on
+different builds:
+
+1. **Baseline** — check out (or keep running) a build from *before* the object-storage and
+   cache work, seed the catalog, and run the harness. Here `GET /api/products` returns the
+   image bytes inline and hits PostgreSQL on every request.
+2. **After** — on the current build, seed the same catalog and run the harness again. The
+   image bytes now live in MinIO (the startup backfill migrates the seeded rows on first run,
+   so the list carries only URLs) and repeated reads are served from the Redis cache.
+
+Use the **same seed and the same tunables** for both, and compare two numbers from the k6
+summary:
+
+- `http_req_duration` **p95 / p99** — latency; expected to drop once cache hits skip the
+  database.
+- `data_received` — payload weight; expected to drop sharply once the ~50 KB image bytes per
+  item leave the JSON.
+
+Drop both rows into the results table in the top-level `README.md` (Performance section).
+
 ## Tunables (`-e KEY=VALUE`)
 
 | Key | Default | Meaning |

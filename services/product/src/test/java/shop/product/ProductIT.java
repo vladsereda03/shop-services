@@ -26,6 +26,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -37,6 +39,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.server.ResponseStatusException;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MinIOContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -66,14 +69,22 @@ class ProductIT {
   @Container
   static MinIOContainer minio = new MinIOContainer("minio/minio:RELEASE.2025-01-20T14-49-07Z");
 
-  // point the object-storage client at the throwaway MinIO; the startup initializer creates the
-  // bucket there, so the create-good path can PUT and read back through the real client
+  // the catalog read path is @Cacheable, so the context needs a reachable Redis
+  @Container
+  static GenericContainer<?> redis =
+      new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
+
+  // point the object-storage client at the throwaway MinIO (the startup initializer creates the
+  // bucket there, so the create-good path can PUT and read back), and the cache at the throwaway
+  // Redis
   @DynamicPropertySource
-  static void storageProperties(DynamicPropertyRegistry registry) {
+  static void dynamicProperties(DynamicPropertyRegistry registry) {
     registry.add("app.storage.endpoint", minio::getS3URL);
     registry.add("app.storage.access-key", minio::getUserName);
     registry.add("app.storage.secret-key", minio::getPassword);
     registry.add("app.storage.public-base-url", () -> minio.getS3URL() + "/product-images");
+    registry.add("spring.data.redis.host", redis::getHost);
+    registry.add("spring.data.redis.port", () -> redis.getMappedPort(6379));
   }
 
   @Autowired private MockMvc mockMvc;
@@ -86,10 +97,17 @@ class ProductIT {
 
   @Autowired private ImageStorage imageStorage;
 
+  @Autowired private CacheManager cacheManager;
+
   @BeforeEach
   void cleanUp() {
     goodRepository.deleteAll();
     manufacturerRepository.deleteAll();
+    // the catalog cache survives the DB wipe; clear it so a cached list cannot leak between tests
+    Cache catalog = cacheManager.getCache("catalog");
+    if (catalog != null) {
+      catalog.clear();
+    }
   }
 
   // --- pessimistic locking under concurrency ---

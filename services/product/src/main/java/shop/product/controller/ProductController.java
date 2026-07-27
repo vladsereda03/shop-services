@@ -2,7 +2,6 @@ package shop.product.controller;
 
 import jakarta.validation.Valid;
 import java.util.List;
-import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -12,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import shop.product.model.Good;
+import shop.product.model.dto.CatalogItemDTO;
 import shop.product.model.dto.CreateGoodRequest;
 import shop.product.model.dto.GoodDTO;
 import shop.product.service.ImageStorage;
@@ -25,9 +25,10 @@ public class ProductController {
   private final ProductService productService;
   private final ImageStorage imageStorage;
 
+  // cached catalog-list projection (no per-item stock); availability comes from getById
   @GetMapping()
-  public List<GoodDTO> getAll() {
-    return productService.getAll().stream().map(this::toDto).collect(Collectors.toList());
+  public List<CatalogItemDTO> getAll() {
+    return productService.getCatalog();
   }
 
   @GetMapping("/{id}")

@@ -44,6 +44,13 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
         <dependency>
+            <!-- WebClient for the reactive SSE relay (Р7): streams order's live-orders feed and
+                 re-emits it to the browser. MVC and WebFlux are both on the classpath, so Boot
+                 keeps running the servlet stack (MVC wins) — this only adds WebClient + Reactor -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>

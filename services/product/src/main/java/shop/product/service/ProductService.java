@@ -4,13 +4,17 @@ import jakarta.persistence.EntityNotFoundException;
 import java.util.Base64;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import shop.product.model.Good;
 import shop.product.model.Manufacturer;
+import shop.product.model.dto.CatalogItemDTO;
 import shop.product.model.dto.CreateGoodRequest;
+import shop.product.model.dto.ManufacturerDTO;
 import shop.product.repository.GoodRepository;
 import shop.product.repository.ManufacturerRepository;
 
@@ -22,9 +26,27 @@ public class ProductService {
   private final ManufacturerRepository manufacturerRepository;
   private final ImageStorage imageStorage;
 
+  // Cached catalog list for the hot read path. The projection omits `quantity`, so stock changes
+  // (reserve/release) never invalidate it; only catalog composition changes (createGood) evict it.
+  // Single logical entry — the list has no arguments — under the fixed key `all`.
+  @Cacheable(cacheNames = "catalog", key = "'all'")
   @Transactional(readOnly = true)
-  public List<Good> getAll() {
-    return goodRepository.findAll();
+  public List<CatalogItemDTO> getCatalog() {
+    return goodRepository.findAll().stream().map(this::toCatalogItem).toList();
+  }
+
+  private CatalogItemDTO toCatalogItem(Good good) {
+    String imageUrl = good.getImageKey() == null ? null : imageStorage.urlFor(good.getImageKey());
+    List<ManufacturerDTO> manufacturers =
+        good.getManufacturers().stream().map(ManufacturerDTO::new).toList();
+    return new CatalogItemDTO(
+        good.getId(),
+        good.getName(),
+        good.getPriceKopeck(),
+        good.getDescription(),
+        good.getCategory(),
+        imageUrl,
+        manufacturers);
   }
 
   @Transactional(readOnly = true)
@@ -61,6 +83,8 @@ public class ProductService {
     good.setQuantity(good.getQuantity() + quantity);
   }
 
+  // a new catalog entry changes the list, so drop the cached projection
+  @CacheEvict(cacheNames = "catalog", allEntries = true)
   @Transactional
   public Good createGood(CreateGoodRequest request) {
     if (request.getName() == null || request.getName().isBlank()) {

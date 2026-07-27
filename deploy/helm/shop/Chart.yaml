@@ -1,0 +1,11 @@
+apiVersion: v2
+name: shop
+description: >-
+  The Shop microservices platform — six Spring Boot services, with optional
+  in-cluster dev infrastructure (PostgreSQL, Kafka, Redis, MinIO) and an
+  observability stack. Targets a local kind cluster; see the chart README.
+type: application
+# chart version — bump on template changes
+version: 0.1.0
+# the application these manifests deploy
+appVersion: "1.0-SNAPSHOT"

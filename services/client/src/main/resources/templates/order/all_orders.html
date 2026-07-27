@@ -6,29 +6,65 @@
 <th:block th:replace="~{fragments/layout :: header}"/>
 
 <main class="page page-narrow">
-    <h1 class="page-title">Ваші замовлення</h1>
+    <h1 class="page-title">Ваші замовлення <span class="live-badge" title="Оновлюється в реальному часі">● наживо</span></h1>
 
-    <p class="empty-state" th:if="${#lists.isEmpty(orders)}">У вас ще немає замовлень</p>
+    <p class="empty-state" id="orders-empty" th:if="${#lists.isEmpty(orders)}">У вас ще немає замовлень</p>
 
-    <div class="card order-card" th:each="order : ${orders}">
-        <div class="order-header">
-            <h2 th:text="'Замовлення №' + ${order.id}">Замовлення №</h2>
-            <span class="order-date" th:text="${order.createdAt}">час оформлення</span>
-        </div>
+    <div id="orders-list">
+        <div class="card order-card" th:each="order : ${orders}">
+            <div class="order-header">
+                <h2 th:text="'Замовлення №' + ${order.id}">Замовлення №</h2>
+                <span class="order-date" th:text="${order.createdAt}">час оформлення</span>
+            </div>
 
-        <div class="cart-line" th:each="item : ${order.items}">
-            <span class="cart-line-name" th:text="${item.name}"></span>
-            <span class="cart-line-qty" th:text="|${item.quantity} од.|"></span>
-        </div>
+            <div class="cart-line" th:each="item : ${order.items}">
+                <span class="cart-line-name" th:text="${item.name}"></span>
+                <span class="cart-line-qty" th:text="|${item.quantity} од.|"></span>
+            </div>
 
-        <div class="cart-total">
-            <span>Разом</span>
-            <span class="price" th:text="|${order.totalGrn} грн|"></span>
+            <div class="cart-total">
+                <span>Разом</span>
+                <span class="price" th:text="|${order.totalGrn} грн|"></span>
+            </div>
         </div>
     </div>
 
     <a class="back-link" th:href="@{/}">До каталогу</a>
 </main>
+
+<style>
+    .live-badge { font-size: .5em; color: #16a34a; vertical-align: middle; margin-left: .4rem; }
+    .order-card-new { animation: order-flash 1.6s ease-out; }
+    @keyframes order-flash { from { background: rgba(34, 197, 94, .18); } to { background: transparent; } }
+</style>
+
+<!-- live orders feed: SSE relayed by the client BFF from the order service. New orders created by
+     an async LiqPay callback or a scheduled recurring charge appear here without a page refresh. -->
+<script>
+    (function () {
+        const list = document.getElementById('orders-list');
+        const source = new EventSource('/orders/stream');
+        source.onmessage = function (event) {
+            const order = JSON.parse(event.data);
+            const empty = document.getElementById('orders-empty');
+            if (empty) empty.remove();
+            if (document.getElementById('order-' + order.id)) return; // ignore a reconnect replay
+            const count = (order.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0);
+            const total = Number(order.totalPrice || 0).toFixed(2);
+            const card = document.createElement('div');
+            card.className = 'card order-card order-card-new';
+            card.id = 'order-' + order.id;
+            card.innerHTML =
+                '<div class="order-header">' +
+                    '<h2>Замовлення №' + order.id + '</h2>' +
+                    '<span class="order-date">щойно</span>' +
+                '</div>' +
+                '<div class="cart-total"><span>Разом (' + count + ' од.)</span>' +
+                    '<span class="price">' + total + ' грн</span></div>';
+            list.prepend(card);
+        };
+    })();
+</script>
 
 </body>
 </html>

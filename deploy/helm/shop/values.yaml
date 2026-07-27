@@ -1,0 +1,52 @@
+# ── Images ──────────────────────────────────────────────────────────────────
+# Each service image is `<repository>/<service>:<tag>`. The local kind workflow
+# builds `shop/<service>` from the root Dockerfile and loads them into the node
+# with `kind load docker-image` — hence the `shop` repository and IfNotPresent
+# pull policy (no registry pull). For a remote cluster, point `repository` at
+# GHCR: `ghcr.io/<owner>/<repo>` and set `pullPolicy: Always`.
+image:
+  repository: shop
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# ── Per-service defaults (overridable under `services.<name>`) ────────────────
+defaults:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      # no CPU limit on purpose — CPU is compressible, a limit only adds throttling
+      memory: 768Mi
+  # Kubernetes probes map to Spring Boot's actuator health groups (liveness /
+  # readiness are enabled per service in application.yaml). The startup probe
+  # covers a slow JVM boot before liveness starts acting.
+  probes:
+    startup:
+      path: /actuator/health/readiness
+      failureThreshold: 30
+      periodSeconds: 5
+    liveness:
+      path: /actuator/health/liveness
+      periodSeconds: 10
+    readiness:
+      path: /actuator/health/readiness
+      periodSeconds: 10
+
+# ── The six application services ──────────────────────────────────────────────
+# Service name == in-cluster DNS name == container port basis, so neighbours
+# reach each other at e.g. http://order:8084 (wired via ConfigMap in 6.2).
+services:
+  auth:
+    port: 9000
+  client:
+    port: 8080
+  product:
+    port: 8082
+  cart:
+    port: 8083
+  order:
+    port: 8084
+  payment:
+    port: 8085

@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +17,7 @@ import shop.order.client.CartClient;
 import shop.order.model.Order;
 import shop.order.model.dto.CartDTO;
 import shop.order.model.dto.CartItemDTO;
+import shop.order.model.dto.OrderDTO;
 import shop.order.repository.OrderRepository;
 
 @Service
@@ -26,6 +28,7 @@ public class OrderService {
 
   private final OrderRepository orderRepository;
   private final CartClient cartClient;
+  private final ApplicationEventPublisher events;
 
   @Transactional
   public Order checkout(Long userId, Long paymentId) {
@@ -87,6 +90,9 @@ public class OrderService {
     // fails this call, its transaction rolls back, and LiqPay's next redelivery finds the winner.
     order = orderRepository.saveAndFlush(order);
     logger.info("Order {} created for user {} ({} items)", order.getId(), userId, items.size());
+    // feed the live-orders stream after commit (see OrderStreamService); the DTO is built now while
+    // the entity is still managed, so the post-commit emit needs no re-read
+    events.publishEvent(new OrderCreatedEvent(OrderDTO.from(order)));
     return order;
   }
 
