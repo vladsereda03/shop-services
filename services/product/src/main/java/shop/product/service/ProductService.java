@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import shop.product.model.Good;
 import shop.product.model.Manufacturer;
+import shop.product.model.dto.CatalogDTO;
 import shop.product.model.dto.CatalogItemDTO;
 import shop.product.model.dto.CreateGoodRequest;
 import shop.product.model.dto.ManufacturerDTO;
@@ -28,11 +29,12 @@ public class ProductService {
 
   // Cached catalog list for the hot read path. The projection omits `quantity`, so stock changes
   // (reserve/release) never invalidate it; only catalog composition changes (createGood) evict it.
-  // Single logical entry — the list has no arguments — under the fixed key `all`.
+  // Single logical entry — the list has no arguments — under the fixed key `all`. Wrapped in a
+  // concrete CatalogDTO so the JSON serializer round-trips it from Redis (see CatalogDTO).
   @Cacheable(cacheNames = "catalog", key = "'all'")
   @Transactional(readOnly = true)
-  public List<CatalogItemDTO> getCatalog() {
-    return goodRepository.findAll().stream().map(this::toCatalogItem).toList();
+  public CatalogDTO getCatalog() {
+    return new CatalogDTO(goodRepository.findAll().stream().map(this::toCatalogItem).toList());
   }
 
   private CatalogItemDTO toCatalogItem(Good good) {

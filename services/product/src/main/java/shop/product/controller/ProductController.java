@@ -25,10 +25,11 @@ public class ProductController {
   private final ProductService productService;
   private final ImageStorage imageStorage;
 
-  // cached catalog-list projection (no per-item stock); availability comes from getById
+  // cached catalog-list projection (no per-item stock); availability comes from getById. Unwrap the
+  // cache wrapper so the response stays a plain JSON array of items.
   @GetMapping()
   public List<CatalogItemDTO> getAll() {
-    return productService.getCatalog();
+    return productService.getCatalog().getItems();
   }
 
   @GetMapping("/{id}")

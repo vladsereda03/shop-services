@@ -94,22 +94,22 @@ class CacheIT {
     one = goodRepository.saveAndFlush(one);
 
     // first read populates the cache
-    assertThat(productService.getCatalog()).hasSize(1);
+    assertThat(productService.getCatalog().getItems()).hasSize(1);
 
     // a row inserted directly (bypassing @CacheEvict) stays invisible → the list was served cached
     Good two = new Good("Item two", 2000L, "d", "toys", List.of());
     two.setQuantity(5);
     goodRepository.saveAndFlush(two);
-    assertThat(productService.getCatalog()).hasSize(1);
+    assertThat(productService.getCatalog().getItems()).hasSize(1);
 
     // a stock change must NOT evict the catalog cache (quantity is not in the projection)
     productService.reserve(one.getId(), 1);
-    assertThat(productService.getCatalog()).hasSize(1);
+    assertThat(productService.getCatalog().getItems()).hasSize(1);
 
     // creating a good through the service evicts the cache → the next read is rebuilt from the DB
     productService.createGood(
         new CreateGoodRequest("Item three", 3000L, "d", "toys", 5, null, List.of()));
-    assertThat(productService.getCatalog()).hasSize(3);
+    assertThat(productService.getCatalog().getItems()).hasSize(3);
   }
 
   @Test
