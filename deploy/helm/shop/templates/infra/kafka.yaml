@@ -1,0 +1,93 @@
+{{- if .Values.devInfra.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/part-of: shop
+spec:
+  replicas: 1
+  # single node with a fixed node id + advertised listener — never two pods at once
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kafka
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka
+        app.kubernetes.io/part-of: shop
+    spec:
+      containers:
+        - name: kafka
+          image: {{ .Values.devInfra.kafka.image }}
+          # single-node KRaft in combined mode (broker + controller in one process). The 3-broker /
+          # 3-controller split cluster (infra/docker/kafka) is host/compose only; one node is enough
+          # in-cluster. The image auto-formats the log dir with CLUSTER_ID on first start.
+          env:
+            - name: CLUSTER_ID
+              value: {{ .Values.devInfra.kafka.clusterId | quote }}
+            - name: KAFKA_NODE_ID
+              value: "1"
+            - name: KAFKA_PROCESS_ROLES
+              value: broker,controller
+            - name: KAFKA_LISTENERS
+              value: "PLAINTEXT://:9092,CONTROLLER://:9093"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://kafka:9092"
+            - name: KAFKA_CONTROLLER_LISTENER_NAMES
+              value: CONTROLLER
+            - name: KAFKA_CONTROLLER_QUORUM_VOTERS
+              value: "1@localhost:9093"
+            - name: KAFKA_INTER_BROKER_LISTENER_NAME
+              value: PLAINTEXT
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            - name: KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR
+              value: "1"
+            - name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS
+              value: "0"
+            - name: KAFKA_LOG_DIRS
+              value: /tmp/kraft-combined-logs
+          ports:
+            - name: kafka
+              containerPort: 9092
+          readinessProbe:
+            # shallow TCP check; Spring Kafka retries until the broker is fully ready
+            tcpSocket:
+              port: kafka
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: logs
+              mountPath: /tmp/kraft-combined-logs
+      volumes:
+        # ephemeral in dev — topics and consumer offsets reset on a pod restart (fine for the demo)
+        - name: logs
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  labels:
+    app.kubernetes.io/part-of: shop
+spec:
+  selector:
+    app.kubernetes.io/name: kafka
+  ports:
+    - name: kafka
+      port: 9092
+      targetPort: kafka
+{{- end }}

@@ -1,0 +1,63 @@
+{{- if .Values.loadTest.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k6-script
+  labels:
+    app.kubernetes.io/part-of: shop
+data:
+  catalog.js: |
+{{ .Files.Get "files/catalog.js" | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k6-catalog
+  labels:
+    app.kubernetes.io/name: k6
+    app.kubernetes.io/part-of: shop
+spec:
+  # a fresh Job each run; delete the old one first (helm keeps the name stable)
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k6
+        app.kubernetes.io/part-of: shop
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: k6
+          image: {{ .Values.loadTest.image }}
+          args: ["run", "/scripts/catalog.js"]
+          env:
+            # in-cluster DNS: product directly; the token is fetched from auth over plain Service
+            # DNS (its iss claim stays auth.local:9000, which product validates via the CoreDNS
+            # rewrite — see the Kubernetes section in the README)
+            - name: BASE_URL_PRODUCT
+              value: http://product:8082
+            - name: BASE_URL_AUTH
+              value: http://auth:9000
+            - name: VUS
+              value: {{ .Values.loadTest.vus | quote }}
+            - name: RAMP
+              value: {{ .Values.loadTest.ramp | quote }}
+            - name: STEADY
+              value: {{ .Values.loadTest.steady | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+      volumes:
+        - name: script
+          configMap:
+            name: k6-script
+{{- end }}

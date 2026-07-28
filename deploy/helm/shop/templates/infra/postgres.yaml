@@ -1,0 +1,104 @@
+{{- if .Values.devInfra.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  labels:
+    app.kubernetes.io/part-of: shop
+data:
+  # runs once on an empty data dir: create the five service databases (each service then
+  # migrates its own schema with Flyway on startup)
+  init-databases.sql: |
+    CREATE DATABASE "authDB";
+    CREATE DATABASE products;
+    CREATE DATABASE carts;
+    CREATE DATABASE orders;
+    CREATE DATABASE payments;
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  labels:
+    app.kubernetes.io/part-of: shop
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: {{ .Values.devInfra.postgres.storage }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: shop
+spec:
+  replicas: 1
+  # single ReadWriteOnce PVC — never run two pods at once
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/part-of: shop
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.devInfra.postgres.image }}
+          env:
+            # reuse the shared credentials so the services and the database agree
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: shop-secrets
+                  key: SPRING_DATASOURCE_USERNAME
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: shop-secrets
+                  key: SPRING_DATASOURCE_PASSWORD
+            # keep PGDATA in a subdir so a non-empty volume root (e.g. lost+found) does not
+            # stop Postgres from initialising
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\""]
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-data
+        - name: init
+          configMap:
+            name: postgres-init
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    app.kubernetes.io/part-of: shop
+spec:
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+{{- end }}

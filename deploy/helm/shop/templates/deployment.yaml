@@ -9,12 +9,20 @@ metadata:
   labels:
     {{- include "shop.labels" (dict "name" $name "root" $) | nindent 4 }}
 spec:
+  {{- if not (and $svc.autoscaling $svc.autoscaling.enabled) }}
+  # HPA-managed services omit replicas so the autoscaler owns the count (see hpa.yaml)
   replicas: {{ $svc.replicas | default $defaults.replicas }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "shop.selectorLabels" (dict "name" $name) | nindent 6 }}
   template:
     metadata:
+      annotations:
+        # Prometheus scrapes pods carrying these annotations (see observability/prometheus.yaml)
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: {{ $svc.port | quote }}
       labels:
         {{- include "shop.selectorLabels" (dict "name" $name) | nindent 8 }}
     spec:
@@ -22,6 +30,8 @@ spec:
       # enforce it at the pod level too
       securityContext:
         runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: {{ $name }}
           image: "{{ $.Values.image.repository }}/{{ $name }}:{{ $.Values.image.tag }}"
@@ -29,7 +39,18 @@ spec:
           ports:
             - name: http
               containerPort: {{ $svc.port }}
-          # env (ConfigMap + Secret) is wired in sub-step 6.2
+          envFrom:
+            - configMapRef:
+                name: shop-config
+            - secretRef:
+                name: shop-secrets
+          {{- with $svc.env }}
+          env:
+            {{- range $key, $value := . }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+          {{- end }}
           startupProbe:
             httpGet:
               path: {{ $probes.startup.path }}
@@ -48,9 +69,16 @@ spec:
             periodSeconds: {{ $probes.readiness.periodSeconds }}
           resources:
             {{- toYaml ($svc.resources | default $defaults.resources) | nindent 12 }}
-          # readOnlyRootFilesystem + a writable /tmp mount are added in the 6.5 hardening pass
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+          volumeMounts:
+            # writable scratch for the JVM / embedded Tomcat under a read-only root filesystem
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
 {{- end }}

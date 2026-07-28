@@ -1,0 +1,56 @@
+# Alerting rules evaluated by Prometheus itself (no Alertmanager — see the compose stack header).
+# Reused verbatim from infra/docker/prometheus/alerts.yml for the in-cluster Prometheus.
+groups:
+  - name: shop-service-health
+    rules:
+      - alert: InstanceDown
+        expr: up{job="shop-services"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.application }} is down"
+          description: "Prometheus has failed to scrape {{ $labels.application }} ({{ $labels.instance }}) for 1m."
+
+      - alert: HighServerErrorRate
+        expr: |
+          sum by (application) (rate(http_server_requests_seconds_count{status=~"5.."}[5m]))
+            / sum by (application) (rate(http_server_requests_seconds_count[5m]))
+            > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 5xx rate on {{ $labels.application }}"
+          description: "{{ $labels.application }} is serving more than 5% 5xx responses (5m average)."
+
+  - name: shop-resilience
+    rules:
+      - alert: CircuitBreakerOpen
+        expr: resilience4j_circuitbreaker_state{state="open"} == 1
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Circuit breaker '{{ $labels.name }}' open on {{ $labels.application }}"
+          description: "The '{{ $labels.name }}' circuit breaker on {{ $labels.application }} has been open for 1m — its downstream dependency is failing."
+
+  - name: shop-async-reliability
+    rules:
+      - alert: OutboxRelayStalled
+        expr: outbox_unpublished_age_seconds > 60
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "auth outbox relay is falling behind"
+          description: "The oldest unpublished outbox event in auth has been older than 60s for 2m — the Kafka relay looks stalled, so new users may not be getting carts."
+
+      - alert: KafkaConsumerLagHigh
+        expr: max by (application) (kafka_consumer_fetch_manager_records_lag) > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "cart consumer lag is high"
+          description: "The cart consumer is more than 50 records behind for 5m — user-registered events are not being processed fast enough."

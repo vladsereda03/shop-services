@@ -1,0 +1,42 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shop
+  labels:
+    app.kubernetes.io/part-of: shop
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+  annotations:
+    # the live-orders feed (Р7) is Server-Sent Events: don't buffer the response and allow a
+    # long-lived connection
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    # the browser reaches auth at auth.local:9000 (kind maps host 9000 -> ingress); the hardcoded
+    # issuer http://auth.local:9000 stays consistent, and the same host resolves in-cluster via the
+    # CoreDNS rewrite
+    - host: {{ .Values.ingress.authHost }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: auth
+                port:
+                  number: {{ .Values.services.auth.port }}
+    # the browser reaches the BFF at localhost:8080 (kind maps host 8080 -> ingress), matching the
+    # client's redirect-uri
+    - host: {{ .Values.ingress.clientHost }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: client
+                port:
+                  number: {{ .Values.services.client.port }}
+{{- end }}

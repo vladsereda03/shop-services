@@ -1,0 +1,32 @@
+# kind cluster for the Shop chart: a single node that also hosts the ingress controller.
+#
+#   kind create cluster --config deploy/kind/cluster.yaml
+#
+# Then install the kind variant of ingress-nginx, apply the CoreDNS rewrite that maps `auth.local`
+# to the auth Service in-cluster, load the images and `helm install` (see the README "Kubernetes"
+# section). The extraPortMappings below forward the three host ports the app expects (80 for the
+# BFF over the ingress, plus 9000 and 8080 which the hardcoded issuer and redirect-uri bake in) to
+# the ingress controller, which routes by Host header.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      # ingress HTTP
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      # browser -> auth at auth.local:9000  (issuer http://auth.local:9000)
+      - containerPort: 80
+        hostPort: 9000
+        protocol: TCP
+      # browser -> BFF at localhost:8080  (client redirect-uri)
+      - containerPort: 80
+        hostPort: 8080
+        protocol: TCP

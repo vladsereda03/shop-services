@@ -34,19 +34,142 @@ defaults:
       path: /actuator/health/readiness
       periodSeconds: 10
 
+# ── Shared non-secret config (ConfigMap `shop-config`, envFrom on every service) ──────
+config:
+  # ECS structured JSON logs to stdout (the log collector ships the fields as-is)
+  LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+  # spans go to the in-cluster Zipkin (deployed in 6.6); a missing Zipkin is harmless
+  MANAGEMENT_ZIPKIN_TRACING_ENDPOINT: http://zipkin:9411/api/v2/spans
+  # let the JVM use most of the container memory limit as heap (default is a conservative 25%)
+  JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0"
+
+# ── Shared secrets (Secret `shop-secrets`, envFrom on every service) ──────────────────
+# Dev defaults are demo values, not real credentials. NOTE (dev simplification): a single
+# shared Secret — a production chart would scope the JWT signing key to auth alone. Other
+# secrets (OAuth2 client secrets, LiqPay keys) are intentionally NOT set here: the services
+# fall back to their application.yaml dev defaults, exactly as the compose stack does.
+secrets:
+  SPRING_DATASOURCE_USERNAME: shop
+  SPRING_DATASOURCE_PASSWORD: shop
+  # auth's RSA signing key — REQUIRED, no safe default. Supply the same values as your compose
+  # `.env` via `-f my-values.yaml` or `--set`. Empty here on purpose (auth will not start until set).
+  JWK_KEY_ID: ""
+  JWT_PUBLIC_KEY: ""
+  JWT_PRIVATE_KEY: ""
+
+# ── Ingress (browser edge) ────────────────────────────────────────────────────────────
+# ingress-nginx routes by Host. The app's issuer (auth.local:9000) and the client's redirect-uri
+# (localhost:8080) bake the ports in, so kind must also map host ports 9000 and 8080 to the ingress
+# (see deploy/kind/cluster.yaml). In-cluster, `auth.local` resolves to the auth Service through a
+# CoreDNS rewrite (the client's OIDC provider endpoints use it); no application code changes.
+ingress:
+  enabled: true
+  className: nginx
+  authHost: auth.local
+  clientHost: localhost
+
+# ── Observability (in-cluster, gated) ─────────────────────────────────────────────────
+# Prometheus discovers pods by the prometheus.io/* annotations the Deployments carry; Alloy tails
+# pod logs (via the Kubernetes API — no host mounts) to Loki; spans go to Zipkin; Grafana wires
+# Prometheus + Loki as provisioned datasources. Disable to run without the in-cluster observability
+# stack (the actuator endpoints stay open regardless).
+observability:
+  enabled: true
+  prometheus:
+    image: prom/prometheus:v3.5.0
+  zipkin:
+    image: openzipkin/zipkin:3.6.1
+  loki:
+    image: grafana/loki:3.5.5
+  alloy:
+    image: grafana/alloy:v1.11.0
+  grafana:
+    image: grafana/grafana:12.1.0
+    # demo credentials; override via -f my-values.yaml if Grafana is ever exposed
+    adminUser: admin
+    adminPassword: admin
+
+# ── In-cluster load test (k6 Job, off by default) ─────────────────────────────────────
+# A one-shot k6 Job that hammers product's catalog read path to drive its CPU up and make the
+# HPA scale it out. Off by default (it is a load generator, not part of a normal install); enable
+# for a demo run: `helm upgrade shop deploy/helm/shop --set loadTest.enabled=true`, then watch
+# `kubectl get hpa product -w`. Reuses the Р5 k6 script (files/catalog.js).
+loadTest:
+  enabled: false
+  image: grafana/k6:0.54.0
+  # ramping-vus tunables passed to the script via env
+  vus: 50
+  ramp: 30s
+  steady: 2m
+
+# ── Dev backing infrastructure (single-replica, dev-only) ─────────────────────────────
+# Enabled for a local kind run; disable to point the services at external infra. NOT
+# production-grade — prod would use managed services or operators (replication, backups).
+devInfra:
+  enabled: true
+  postgres:
+    image: postgres:16-alpine
+    storage: 2Gi
+  redis:
+    image: redis:7-alpine
+  minio:
+    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
+    storage: 2Gi
+    # must match product's APP_STORAGE_ACCESS_KEY / APP_STORAGE_SECRET_KEY above
+    rootUser: minioadmin
+    rootPassword: minioadmin
+  kafka:
+    # the runtime cluster image (the 3.8.1 pin is only for the Testcontainers tests)
+    image: apache/kafka:4.0.0
+    # any valid base64 KRaft cluster id; reused from the compose stack
+    clusterId: Efq_Ydb1S-Km8YPiqv8SfQ
+
 # ── The six application services ──────────────────────────────────────────────
+# `env` carries the k8s-DNS endpoints that replace the localhost defaults in application.yaml.
 # Service name == in-cluster DNS name == container port basis, so neighbours
 # reach each other at e.g. http://order:8084 (wired via ConfigMap in 6.2).
 services:
   auth:
     port: 9000
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/authDB
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
   client:
     port: 8080
+    env:
+      # the BFF's neighbour base-urls (application.yaml points them at localhost / *.local)
+      SERVICES_PRODUCT_BASE_URL: http://product:8082
+      SERVICES_CART_BASE_URL: http://cart:8083
+      SERVICES_ORDER_BASE_URL: http://order:8084
+      SERVICES_PAYMENT_BASE_URL: http://payment:8085
   product:
     port: 8082
+    # the only horizontally-scalable service here: stateless and cache-backed, and the target of the
+    # k6 load test. auth (in-memory Authorization Server state), client (HttpSession) and order
+    # (in-memory SSE sink) must stay single-replica; cart/payment could scale but are not autoscaled
+    # in this demo.
+    autoscaling:
+      enabled: true
+      minReplicas: 1
+      maxReplicas: 4
+      targetCPUUtilizationPercentage: 70
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/products
+      SPRING_DATA_REDIS_HOST: redis
+      APP_STORAGE_ENDPOINT: http://minio:9000
+      APP_STORAGE_ACCESS_KEY: minioadmin
+      APP_STORAGE_SECRET_KEY: minioadmin
   cart:
     port: 8083
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/carts
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
   order:
     port: 8084
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/orders
   payment:
     port: 8085
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/payments
+      SERVICES_ORDER_BASE_URL: http://order:8084

@@ -400,6 +400,98 @@ Notes:
 - Stop everything with `docker compose down` (add `-v` to also drop the
   database volume and start fresh next time).
 
+## Run on Kubernetes (kind)
+
+The Helm chart in [`deploy/helm/shop`](deploy/helm/shop) deploys the whole platform — the
+six services, their dev backing infrastructure (PostgreSQL, single-node Kafka, Redis, MinIO)
+and the observability stack (Prometheus, Grafana, Loki, Alloy, Zipkin) — to a local
+[kind](https://kind.sigs.k8s.io) cluster. Everything is templated over `values.yaml`; the
+dev infra and observability are gated (`devInfra.enabled`, `observability.enabled`) so the
+same chart can point at managed infrastructure on a real cluster. Prerequisites: Docker,
+`kind`, `kubectl` and `helm`.
+
+1. **Build the images and create the cluster.** The chart references `shop/<service>:latest`
+   with `IfNotPresent`, so the images only have to exist inside the node:
+
+   ```
+   docker compose build                                    # tags shop/<service>:latest
+   kind create cluster --config deploy/kind/cluster.yaml
+   kind load docker-image shop/auth shop/client shop/product shop/cart shop/order shop/payment
+   ```
+
+2. **Install the ingress controller** (the kind variant — it matches the `ingress-ready` node
+   label the cluster config sets) and wait for it:
+
+   ```
+   kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+   kubectl -n ingress-nginx wait --for=condition=ready pod \
+     -l app.kubernetes.io/component=controller --timeout=120s
+   ```
+
+3. **Point `auth.local` at the auth Service in-cluster.** The OIDC issuer is the hardcoded
+   string `http://auth.local:9000`, so the client and the resource servers must reach the auth
+   server under that exact name. Add a CoreDNS rewrite:
+
+   ```
+   kubectl -n kube-system edit configmap coredns
+   # in the Corefile, just above `kubernetes cluster.local ...`, add:
+   #   rewrite name auth.local auth.default.svc.cluster.local
+   ```
+
+   On the host, `auth.local` must resolve to `127.0.0.1` (the same
+   [hosts entry](#1-hosts-entries) the other run modes need) so the browser reaches the
+   ingress; kind forwards host port 9000 → ingress → auth, keeping the issuer string intact.
+
+4. **Install the chart** with the JWT signing key pair — the only required secret, the same
+   single-line Base64 values as the compose `.env` (see [`.env.example`](.env.example)):
+
+   ```
+   helm install shop deploy/helm/shop \
+     --set secrets.JWK_KEY_ID=dev-key \
+     --set secrets.JWT_PUBLIC_KEY=<base64 SPKI> \
+     --set secrets.JWT_PRIVATE_KEY=<base64 PKCS#8>
+   kubectl rollout status deploy/client
+   ```
+
+   Open **http://localhost:8080** and log in (redirected to `http://auth.local:9000`, exactly
+   as in the other modes). Tear the cluster down with `kind delete cluster`.
+
+### Autoscaling and the in-cluster load test
+
+`product` is the one horizontally-scalable service (stateless and cache-backed) and carries a
+HorizontalPodAutoscaler (1→4 replicas at 70% CPU); the others stay single-replica on purpose
+(see [Known limitations](#known-limitations--roadmap)). The HPA needs metrics, which kind does
+not ship, so install metrics-server (with `--kubelet-insecure-tls` for kind's self-signed
+kubelet certs):
+
+```
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+kubectl -n kube-system patch deploy metrics-server --type=json \
+  -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+```
+
+Then turn on the bundled k6 Job (off by default) and watch `product` scale out under load:
+
+```
+helm upgrade shop deploy/helm/shop --reuse-values --set loadTest.enabled=true
+kubectl get hpa product -w        # replica count climbs under load, settles back afterwards
+kubectl logs -f job/k6-catalog    # k6's own p95/p99 summary
+```
+
+### Observability in the cluster
+
+Prometheus discovers the pods by their `prometheus.io/*` annotations and reuses the same
+alerting rules as compose (keyed on the `application` label); Alloy tails pod logs to Loki
+**through the Kubernetes API** — non-root, with no host mounts, unlike the compose collector
+that reads the Docker socket; Grafana wires Prometheus + Loki as provisioned datasources. They
+are ClusterIP-only — reach them with port-forwards:
+
+```
+kubectl port-forward svc/grafana 3000:3000     # admin / admin
+kubectl port-forward svc/prometheus 9090:9090
+kubectl port-forward svc/zipkin 9411:9411      # lets Grafana's trace-link derived field resolve
+```
+
 ## Observability
 
 All three pillars — metrics, traces and logs — are wired up, and the compose
@@ -629,10 +721,15 @@ default: daily/weekly/monthly/yearly at 15:00).
   deployment would back the fan-out with a shared bus (e.g. Redis Pub/Sub) — which pairs
   naturally with the Kubernetes work below (long-lived SSE connections also want
   Ingress/readiness that account for streaming).
-- Planned next: Kubernetes deployment (Helm chart, actuator-driven
-  liveness/readiness probes, HPA). An API gateway is deliberately not on the
-  roadmap: the client BFF is already the single browser-facing entry point, and
-  in Kubernetes the Ingress takes over edge routing.
+- The Kubernetes chart's backing infrastructure (`devInfra.*`) and single-node Kafka are
+  dev-only: single-replica, ephemeral or `emptyDir`-backed, no replication or backups. It
+  exists so `helm install` brings up a self-contained cluster; a real deployment disables it
+  (`devInfra.enabled=false`) and points the services at managed databases/brokers/object
+  stores. Likewise only `product` autoscales — `auth` (in-memory Authorization Server state),
+  `client` (HttpSession) and `order` (in-memory SSE sink) are pinned to one replica, so that
+  scaling story stays honest rather than pretending the whole platform is stateless.
+- An API gateway is deliberately not on the roadmap: the client BFF is already the single
+  browser-facing entry point, and in Kubernetes the Ingress takes over edge routing.
 
 ## Repository layout
 
