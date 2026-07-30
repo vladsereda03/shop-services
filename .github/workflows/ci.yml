@@ -34,6 +34,73 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  mutation:
+    # Mutation testing (PIT) over the pure-Mockito unit suites — a test-quality signal
+    # beyond line coverage, published as a downloadable report. Report-only: PIT carries
+    # no mutation-score threshold, so a weak score never breaks the build (a real PIT
+    # failure still fails the job). Runs after the tests pass; the two services in parallel.
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [product, payment]
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Mutation coverage (${{ matrix.module }})
+        run: ./mvnw -B -ntp -Ppit -pl services/${{ matrix.module }} test org.pitest:pitest-maven:mutationCoverage
+
+      - name: Upload PIT report
+        uses: actions/upload-artifact@v4
+        with:
+          name: pit-report-${{ matrix.module }}
+          path: services/${{ matrix.module }}/target/pit-reports/
+          if-no-files-found: error
+          retention-days: 14
+
+  e2e:
+    # End-to-end acceptance tests: bring the built service images up together over real infra with
+    # Docker Compose (Testcontainers) and drive the cross-service flows the per-service ITs stub out.
+    # A separate job so the fast unit/IT `build` job keeps giving quick feedback; the module is opt-in
+    # (-Pe2e), so a plain `mvn verify` never runs it. No secrets: the suite mints its own JWT keys.
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build the service images the e2e stack needs
+        # compose.e2e.yaml references shop/<svc>:latest; build just the four services it brings up
+        run: |
+          for m in auth product cart order; do
+            docker buildx build --build-arg MODULE="$m" -t "shop/$m:latest" --load \
+              --cache-from type=gha,scope=e2e-$m --cache-to type=gha,scope=e2e-$m,mode=max .
+          done
+
+      - name: End-to-end acceptance tests
+        run: ./mvnw -B -ntp -Pe2e -pl tests/e2e verify
+
   images:
     # Build all six service images from the single parameterized Dockerfile,
     # scan them with Trivy, and — only on pushes to main, after the tests have

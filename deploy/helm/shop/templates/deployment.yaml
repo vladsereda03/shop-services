@@ -27,9 +27,14 @@ spec:
         {{- include "shop.selectorLabels" (dict "name" $name) | nindent 8 }}
     spec:
       # the image already runs as the non-root `spring` user (see Dockerfile);
-      # enforce it at the pod level too
+      # enforce it at the pod level too. runAsUser/runAsGroup are REQUIRED here, not just
+      # runAsNonRoot: the Dockerfile creates `spring` by name (uid 999), and the kubelet cannot
+      # verify a non-numeric image user is non-root — it refuses the container with
+      # CreateContainerConfigError unless a numeric uid is pinned.
       securityContext:
         runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
         seccompProfile:
           type: RuntimeDefault
       containers:

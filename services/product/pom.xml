@@ -136,4 +136,31 @@
         </dependency>
     </dependencies>
 
+    <profiles>
+        <!-- Mutation testing (report-only), opt-in and Docker-free:
+               ./mvnw -Ppit -pl services/product test org.pitest:pitest-maven:mutationCoverage
+             Runs the pure-Mockito ProductServiceTest against ProductService mutants. ImageStorage
+             and ImageBackfillRunner live in the same package but are covered by Testcontainers ITs,
+             not unit tests, so they are deliberately left out of the mutation target. -->
+        <profile>
+            <id>pit</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.pitest</groupId>
+                        <artifactId>pitest-maven</artifactId>
+                        <configuration>
+                            <targetClasses>
+                                <param>shop.product.service.ProductService*</param>
+                            </targetClasses>
+                            <targetTests>
+                                <param>shop.product.service.ProductServiceTest</param>
+                            </targetTests>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
 </project>

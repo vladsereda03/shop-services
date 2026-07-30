@@ -62,6 +62,10 @@
     <springdoc.version>2.8.17</springdoc.version>
     <jacoco.version>0.8.13</jacoco.version>
     <archunit.version>1.4.1</archunit.version>
+    <!-- mutation testing (PIT), wired per-service behind the `pit` profile; report-only.
+         1.25.x bundles ASM 9.8+, required to read Java 25 (class file 69) bytecode -->
+    <pitest.version>1.25.8</pitest.version>
+    <pitest-junit5.version>1.2.3</pitest-junit5.version>
     <!-- AWS SDK v2 (S3) is not managed by the Boot BOM; only product uses it, for MinIO object storage -->
     <awssdk.version>2.47.4</awssdk.version>
   </properties>
@@ -110,6 +114,46 @@
   </dependencyManagement>
 
   <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <!-- Mutation testing. Pinned here (version + JUnit 5 test-engine plugin + shared
+               config), but only wired into a build by the `pit` profile in the product and
+               payment modules — the two services with pure-Mockito unit tests, so PIT runs
+               Docker-free. Report-only: no mutation/coverage threshold, so it never fails a build. -->
+          <groupId>org.pitest</groupId>
+          <artifactId>pitest-maven</artifactId>
+          <version>${pitest.version}</version>
+          <dependencies>
+            <dependency>
+              <groupId>org.pitest</groupId>
+              <artifactId>pitest-junit5-plugin</artifactId>
+              <version>${pitest-junit5.version}</version>
+            </dependency>
+          </dependencies>
+          <configuration>
+            <!--suppress MavenModelInspection : the org.mockito:mockito-core:jar property is
+                generated at build time by maven-dependency-plugin:properties; the IDE cannot
+                resolve it statically, but Maven does (same mechanism as the Surefire argLine).
+                PIT forks its own minion JVMs and does NOT inherit Surefire's argLine, and the
+                service unit tests are pure Mockito, so the minions need the same agent (self-attach
+                is deprecated on JDK 25). -->
+            <argLine>-javaagent:${org.mockito:mockito-core:jar}</argLine>
+            <!-- never pull the Testcontainers integration tests into the mutation run (Docker) -->
+            <excludedTestClasses>
+              <param>*IT</param>
+            </excludedTestClasses>
+            <outputFormats>
+              <param>HTML</param>
+              <param>XML</param>
+            </outputFormats>
+            <!-- stable output dir (target/pit-reports) for CI artifact upload -->
+            <timestampedReports>false</timestampedReports>
+          </configuration>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+
     <plugins>
 
       <plugin>
@@ -242,5 +286,18 @@
 
     </plugins>
   </build>
+
+  <profiles>
+    <!-- End-to-end acceptance tests (tests/e2e), opt-in and excluded from the default reactor.
+         They bring the built service images up over real infra with Docker Compose (Testcontainers),
+         far heavier than the per-service integration tests, so they never run in a plain
+         `mvn verify`. Run them with:  ./mvnw -Pe2e -pl tests/e2e verify  (service images must exist). -->
+    <profile>
+      <id>e2e</id>
+      <modules>
+        <module>tests/e2e</module>
+      </modules>
+    </profile>
+  </profiles>
 
 </project>

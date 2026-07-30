@@ -89,6 +89,14 @@ observability:
     adminUser: admin
     adminPassword: admin
 
+# ── Chart smoke test (helm test) ──────────────────────────────────────────────────────
+# `helm test shop` runs an in-cluster smoke check: auth's OIDC issuer identity, a service
+# client_credentials token, and product's catalog authz (401 anonymous / 200 with token).
+# As a helm test hook the Pod runs only on `helm test` — this image is never pulled on a
+# normal install/upgrade.
+tests:
+  image: curlimages/curl:8.11.1
+
 # ── In-cluster load test (k6 Job, off by default) ─────────────────────────────────────
 # A one-shot k6 Job that hammers product's catalog read path to drive its CPU up and make the
 # HPA scale it out. Off by default (it is a load generator, not part of a normal install); enable

@@ -1,0 +1,91 @@
+# Chart smoke test — run with `helm test <release>` after install/upgrade. As a
+# `helm.sh/hook: test` resource this Pod is NOT created on install/upgrade; it only runs on
+# `helm test`, so the curl image is never pulled during a normal deploy.
+#
+# It codifies, in-cluster, the manual end-to-end check from the Kubernetes bring-up:
+#   1. auth's OIDC issuer identity holds on both sides of the network — the discovery document
+#      served at the in-cluster Service DNS still advertises the ingress-facing issuer
+#      http://auth.local:9000 (the hardcoded issuer the whole design pivots on);
+#   2. a service client can mint a client_credentials token from auth over plain Service DNS
+#      (cart-service / dev-default secret);
+#   3. product enforces authz on its catalog: anonymous is 401, a products.read token is 200.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-smoke-test
+  labels:
+    app.kubernetes.io/name: smoke-test
+    app.kubernetes.io/part-of: shop
+    app.kubernetes.io/component: test
+  annotations:
+    helm.sh/hook: test
+    # delete a prior test Pod before re-creating (so `helm test` is re-runnable), and
+    # clean up on success — a FAILED Pod is kept so its logs can be inspected
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  # a hung curl must not wedge the test forever
+  activeDeadlineSeconds: 120
+  securityContext:
+    runAsNonRoot: true
+    # curlimages/curl ships the non-root `curl_user` (uid 100); pin it numerically so the
+    # kubelet can verify non-root without resolving the name (same rule as the service pods)
+    runAsUser: 100
+    runAsGroup: 100
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: smoke
+      image: {{ .Values.tests.image }}
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+      command: ["/bin/sh", "-c"]
+      args:
+        - |
+          set -eu
+          AUTH=http://auth:9000
+          PRODUCT=http://product:8082
+          CURL="curl -s --max-time 10"
+
+          echo "== 1. OIDC discovery: issuer must be http://auth.local:9000 =="
+          DISCO=$($CURL -f "$AUTH/.well-known/openid-configuration")
+          ISS=$(echo "$DISCO" | sed -n 's/.*"issuer":"\([^"]*\)".*/\1/p')
+          if [ "$ISS" != "http://auth.local:9000" ]; then
+            echo "FAIL: issuer is '$ISS', expected http://auth.local:9000"
+            echo "$DISCO"
+            exit 1
+          fi
+          echo "OK: issuer is $ISS"
+
+          echo "== 2. client_credentials token (cart-service) =="
+          TOKEN=$($CURL -f -u cart-service:cart-service-secret \
+            -d grant_type=client_credentials -d scope=products.read \
+            "$AUTH/oauth2/token" \
+            | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+          if [ -z "$TOKEN" ]; then
+            echo "FAIL: no access_token in the token response"
+            exit 1
+          fi
+          echo "OK: got a ${#TOKEN}-char access token"
+
+          echo "== 3. product catalog, anonymous, must be 401 =="
+          CODE=$($CURL -o /dev/null -w '%{http_code}' "$PRODUCT/api/products")
+          if [ "$CODE" != "401" ]; then
+            echo "FAIL: anonymous catalog returned $CODE, expected 401"
+            exit 1
+          fi
+          echo "OK: anonymous catalog is 401"
+
+          echo "== 4. product catalog, with token, must be 200 =="
+          CODE=$($CURL -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $TOKEN" "$PRODUCT/api/products")
+          if [ "$CODE" != "200" ]; then
+            echo "FAIL: authorized catalog returned $CODE, expected 200"
+            exit 1
+          fi
+          echo "OK: authorized catalog is 200"
+
+          echo "ALL SMOKE CHECKS PASSED"

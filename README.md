@@ -269,6 +269,16 @@ Design decisions and production-style bugs found and fixed along the way:
     intact) and the reactive chain needs no thread-bound context; the browser consumes it
     with a plain `EventSource`.
 
+17. **End-to-end acceptance tests against the real deployment artifact.** Every per-service
+    integration test stubs its neighbours at the HTTP level — fast and hermetic, but nothing
+    exercises the services *together*. A separate opt-in module ([`tests/e2e`](tests/e2e)) closes
+    that gap: Testcontainers brings the **built service images** up over real Postgres, Kafka, Redis
+    and MinIO with Docker Compose, and the tests drive the cross-service paths for real — a full
+    OIDC `authorization_code` login for a freshly registered user, then a checkout where adding to
+    the cart makes `cart` call `product` to reserve stock (verified by the stock dropping across the
+    service boundary), and checking out makes `order` read and clear the cart through `cart`. It
+    mints its own ephemeral signing key, so it needs no secret to run.
+
 ## Getting started
 
 ### Prerequisites
@@ -456,6 +466,18 @@ same chart can point at managed infrastructure on a real cluster. Prerequisites:
    Open **http://localhost:8080** and log in (redirected to `http://auth.local:9000`, exactly
    as in the other modes). Tear the cluster down with `kind delete cluster`.
 
+### Smoke test the release
+
+```
+helm test shop --logs
+```
+
+runs an in-cluster smoke check (a `helm test` hook Pod, so the curl image is pulled only on
+demand, never during a normal install). It asserts the three things the whole deploy hinges on:
+auth's OIDC discovery still advertises the ingress-facing issuer `http://auth.local:9000` from
+inside the cluster, a service can mint a `client_credentials` token from auth over plain Service
+DNS, and `product` enforces catalog authz (anonymous → 401, `products.read` token → 200).
+
 ### Autoscaling and the in-cluster load test
 
 `product` is the one horizontally-scalable service (stateless and cache-backed) and carries a
@@ -582,12 +604,16 @@ current build; the protocol and seed are in
 
 | Metric | Baseline (inline images, no cache) | After (object storage + Redis) |
 |---|---|---|
-| `http_req_duration` p95 | _tbd_ | _tbd_ |
-| `http_req_duration` p99 | _tbd_ | _tbd_ |
-| `data_received` (per full-catalog GET) | _tbd_ | _tbd_ |
+| `http_req_duration` p95 | 539 ms | 18 ms |
+| `http_req_duration` p99 | 682 ms | 24 ms |
+| `data_received` (per full-catalog GET) | ~3.4 MB (3,394,071 B) | ~62 KB (63,589 B) |
+| `http_reqs` (throughput) | 110 req/s | 3,808 req/s |
 
-> Load-test numbers are machine-specific; the table is filled from a local run of the
-> harness above rather than baked in.
+> Load-test numbers are machine-specific; the table is filled from a local run of the harness
+> above rather than baked in. This one: the same 50-good synthetic catalog and 50 VUs on both
+> builds, each on a fresh database, on a Windows laptop under Docker Desktop. The absolute
+> figures are noisy — the ~30× payload drop and the order-of-magnitude latency and throughput
+> gains are the point.
 
 ## API documentation
 
@@ -633,6 +659,19 @@ uploads all of them as the `jacoco-coverage` artifact.
   the service layer — plus no field injection and no `System.out` /
   `printStackTrace`; the conventions are enforced by the build, not by review
   discipline (`ArchitectureTest` in every service).
+- **Mutation testing** ([PIT](https://pitest.org/), opt-in behind `-Ppit`,
+  Docker-free): the pure-Mockito unit suites are graded by how many injected
+  faults they actually catch, not merely by line coverage. It runs per service —
+
+  ```
+  ./mvnw -Ppit -pl services/payment test org.pitest:pitest-maven:mutationCoverage
+  ```
+
+  writing an HTML report to `target/pit-reports/index.html`. Scoped to the
+  unit-tested service classes, current **test strength** (mutants killed among
+  those the tests reach) is **93 %** for `payment`'s callback + subscription
+  services and **86 %** for `product`'s catalog/stock service. Report-only on
+  purpose — a hard mutation-score gate is brittle and fights normal refactoring.
 - **Integration tests** (`*IT`, require Docker): full Spring context against real
   PostgreSQL and Kafka started by [Testcontainers](https://testcontainers.com/),
   with the neighbour services stubbed at the HTTP level:
@@ -651,6 +690,26 @@ uploads all of them as the `jacoco-coverage` artifact.
     (no overselling), role/scope authorization including the custom JWT
     authorities converter.
 
+### End-to-end acceptance tests
+
+The integration tests above each stub their neighbours. A separate opt-in module,
+[`tests/e2e`](tests/e2e), closes that gap (highlight 17): it brings the **built service images** up
+together over real Postgres, Kafka, Redis and MinIO with Docker Compose (driven by Testcontainers)
+and drives the cross-service flows for real. It is excluded from the default reactor — build the
+images it needs, then run it explicitly:
+
+```
+docker compose build auth product cart order
+./mvnw -Pe2e -pl tests/e2e verify
+```
+
+The suite mints an ephemeral JWT signing key (no secret needed) and covers issuer identity and
+catalog authz against the Compose deployment, a full `authorization_code` login for a freshly
+registered user, and the checkout journey — add to cart (`cart` → `product` reserves stock, verified
+by the stock dropping across the boundary) then checkout (`order` → `cart` reads and clears the
+cart). The stack is a trimmed sibling of the root compose — no observability plane, single-node
+Kafka — see [Known limitations](#known-limitations--roadmap).
+
 ## CI & supply chain
 
 Every push and pull request runs the full pipeline
@@ -659,7 +718,10 @@ Every push and pull request runs the full pipeline
 1. **Format gate** — `spotless:check` (google-java-format).
 2. **Tests** — `mvn verify`: unit, architecture and Testcontainers integration
    tests, with the JaCoCo coverage reports uploaded as a build artifact.
-3. **Images** — all six services are built from the single parameterized
+3. **Mutation report** — PIT grades the pure-Mockito unit suites in `product`
+   and `payment` (`-Ppit`, report-only) and uploads each HTML report as a
+   `pit-report-<module>` artifact; runs after the tests, parallel to the images.
+4. **Images** — all six services are built from the single parameterized
    [`Dockerfile`](Dockerfile) and scanned with [Trivy](https://trivy.dev/):
    findings land in the repository's Security tab, and a CRITICAL with an
    available fix fails the build (unfixed base-image CVEs are reported, never
@@ -669,6 +731,10 @@ Every push and pull request runs the full pipeline
    ```
    docker pull ghcr.io/vladsereda03/shop-services/<module>:latest
    ```
+5. **End-to-end tests** — a separate job builds the four service images the
+   [`tests/e2e`](tests/e2e) stack needs and runs it (`-Pe2e`), driving the
+   cross-service checkout flow against a real Docker Compose deployment. Kept off
+   the critical `build` job so unit/integration feedback stays fast.
 
 Beyond the pipeline, [CodeQL](.github/workflows/codeql.yml) analyzes every
 push, PR and a weekly cron — in manual build mode, so Lombok- and
@@ -728,6 +794,12 @@ default: daily/weekly/monthly/yearly at 15:00).
   stores. Likewise only `product` autoscales — `auth` (in-memory Authorization Server state),
   `client` (HttpSession) and `order` (in-memory SSE sink) are pinned to one replica, so that
   scaling story stays honest rather than pretending the whole platform is stateless.
+- The end-to-end suite (`tests/e2e`) runs against a trimmed sibling of the compose stack: the four
+  services it drives over real Postgres/Kafka/Redis/MinIO, but no observability plane and a
+  single-node Kafka, and cart's `user-registered` consumer switched off — carts are provisioned on
+  demand there, and a single-node Kafka's group-coordinator churn otherwise starves cart's HTTP
+  threads and makes the run flaky. The Kafka-driven provisioning path stays covered by cart's own
+  integration test.
 - An API gateway is deliberately not on the roadmap: the client BFF is already the single
   browser-facing entry point, and in Kubernetes the Ingress takes over edge routing.
 

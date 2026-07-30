@@ -1,0 +1,55 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>shop-services</groupId>
+        <artifactId>shop</artifactId>
+        <version>1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>e2e</artifactId>
+    <packaging>jar</packaging>
+
+    <name>e2e</name>
+    <description>End-to-end acceptance tests: the built service images wired together over real
+        infra (Docker Compose), exercising the cross-service paths the per-service ITs stub out
+    </description>
+
+    <properties>
+        <!-- no production classes in this module — skip the coverage agent/report and the Boot
+             repackage goal (both inherited from the parent), which assume a main tree -->
+        <jacoco.skip>true</jacoco.skip>
+        <spring-boot.repackage.skip>true</spring-boot.repackage.skip>
+    </properties>
+
+    <dependencies>
+        <!-- brings JUnit 5, AssertJ and Jackson (used to parse token/catalog JSON); the HTTP client
+             is the JDK's java.net.http, no extra dependency -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- JSON parsing (token / catalog / cart responses); not pulled in by starter-test -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- drives the Docker Compose stack (versions managed by the Spring Boot BOM) -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- JDBC seeding of a catalog good straight into product's database (there is no admin user
+             to use the catalog-management API); connects over the exposed postgres port -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

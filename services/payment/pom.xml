@@ -159,4 +159,33 @@
         </dependency>
     </dependencies>
 
+    <profiles>
+        <!-- Mutation testing (report-only), opt-in and Docker-free:
+               ./mvnw -Ppit -pl services/payment test org.pitest:pitest-maven:mutationCoverage
+             Runs the pure-Mockito unit tests against the callback + subscription service mutants.
+             OrderGenerator and SubscriptionScheduleService have no unit tests, so they are left
+             out of the mutation target (the glob SubscriptionService* does not match the latter). -->
+        <profile>
+            <id>pit</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.pitest</groupId>
+                        <artifactId>pitest-maven</artifactId>
+                        <configuration>
+                            <targetClasses>
+                                <param>shop.payment.service.PaymentCallbackService*</param>
+                                <param>shop.payment.service.SubscriptionService*</param>
+                            </targetClasses>
+                            <targetTests>
+                                <param>shop.payment.service.PaymentCallbackServiceTest</param>
+                                <param>shop.payment.service.SubscriptionServiceTest</param>
+                            </targetTests>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
 </project>
